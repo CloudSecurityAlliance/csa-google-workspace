@@ -27,6 +27,20 @@ A1 refs recovered: `['B11', 'A1']` (B11 = the UI comment; A1 = our API-created o
 
 **Finding:** the **XLSX-export read path works** and yields real A1 references — the mapping the Drive `anchor` field does not provide. Sheets comments are *threaded comments*.
 
+## Threads / reply history (re-run 2026-07-09 with reply subfields)
+The B11 comment's full thread is accessible both ways:
+
+- **Native Drive API** — `comments.list` with expanded `replies(author(displayName),content,createdTime,action,deleted)` returns replies in chronological order with author + timestamp:
+  ```
+  comment AAAB_oJ0OTY (B11), 2 replies:
+    2026-07-10T04:23:50Z Kurt Seifried: yo, herte's a reply
+    2026-07-10T04:24:03Z Kurt Seifried: @kurt@seifried.org see this?
+  ```
+  (Replies **must** be requested with subfields — `replies` alone returns them empty.)
+- **XLSX export** — `xl/threadedComments/threadedComment1.xml` links replies to the root via `parentId`, all on `ref="B11"`; legacy `xl/comments1.xml` flattens the thread into one `Comment:/Reply:/Reply:` text blob.
+
+**Findings:** full thread history (author, timestamp, and `resolve`/`reopen` action per reply) is available via the API `replies` array. **@mentions are stored as plain text** in `content` (`@kurt@seifried.org see this?`) — no structured mention object.
+
 ## Net effect on the research
 - Corrected "anchors are opaque" → "structured (`workbook-range`) but not A1-decodable."
 - Moved `workbook-range` out of the "folklore" list — it is the real format.

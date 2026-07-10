@@ -108,6 +108,8 @@ Reference: <https://developers.google.com/workspace/drive/api/reference/rest/v3/
 
 `replies.list` supports `pageToken`, `pageSize`, `includeDeleted`, and requires `fields`. It does **not** support `startModifiedTime`.
 
+> **Reading full thread history (MEASURED 2026-07-09).** `comments.list` returns each comment's whole thread inline via the `replies` array — chronological, with author, timestamp, and a `resolve`/`reopen` `action` per reply (your audit trail). **You must expand reply subfields** (`replies(author(displayName),content,createdTime,action,deleted)`); requesting bare `replies` returns them empty. **@mentions are plain text** inside `content` (e.g. `@user@example.com …`) — there is no structured mention object.
+
 ---
 
 ## 4. Resolution model

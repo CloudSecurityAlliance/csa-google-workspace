@@ -38,7 +38,13 @@ from googleapiclient.discovery import build
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 # Every comments/replies method except delete REQUIRES a fields spec (see reference doc).
-COMMENT_FIELDS = "comments(id,anchor,content,htmlContent,quotedFileContent,author,resolved,createdTime,replies),nextPageToken"
+# Replies MUST be expanded with subfields or the API returns them empty.
+COMMENT_FIELDS = (
+    "comments(id,anchor,content,quotedFileContent,resolved,createdTime,"
+    "author(displayName,emailAddress),"
+    "replies(id,createdTime,action,deleted,content,author(displayName))),"
+    "nextPageToken"
+)
 
 
 def get_drive():
@@ -102,11 +108,20 @@ def test_dump(drive, file_id):
         ).execute()
         for c in resp.get("comments", []):
             n += 1
+            author = (c.get("author") or {}).get("displayName", "?")
             print(f"\n--- comment {c.get('id')} ---")
+            print("  author:           ", author)
             print("  content:          ", (c.get("content") or "")[:80])
             print("  RAW anchor:       ", repr(c.get("anchor")))  # <-- the key datum
             print("  quotedFileContent:", json.dumps(c.get("quotedFileContent")))
             print("  resolved:         ", c.get("resolved"))
+            replies = c.get("replies", [])
+            print(f"  replies:           {len(replies)}")
+            for r in replies:  # replies come back in chronological order
+                who = (r.get("author") or {}).get("displayName", "?")
+                act = f" [action={r['action']}]" if r.get("action") else ""
+                body = "(deleted)" if r.get("deleted") else (r.get("content") or "")[:100]
+                print(f"    - {r.get('createdTime')} {who}{act}: {body}")
         page_token = resp.get("nextPageToken")
         if not page_token:
             break
@@ -130,7 +145,21 @@ def test_xlsx(drive, file_id):
         refs = re.findall(r'ref="([^"]+)"', xml)  # Excel stores each comment against an A1 ref
         print(f"\n--- {part} ---")
         print("  A1 refs found:", refs or "(none — check the raw XML below)")
-        print("  raw (first 1200 chars):\n", xml[:1200])
+        if "threadedComment" in part:
+            # A thread = a root threadedComment plus replies that carry parentId.
+            print("  thread structure (parentId links replies to their root):")
+            for m in re.finditer(
+                r"<[\w:]*threadedComment\b([^>]*)>.*?<[\w:]*text[^>]*>(.*?)</[\w:]*text>",
+                xml, re.S,
+            ):
+                a = dict(re.findall(r'([\w:]+)="([^"]*)"', m.group(1)))
+                short = lambda v: (v or "").strip("{}")[:8]
+                kind = "reply" if a.get("parentId") else "ROOT "
+                print(f"    [{kind}] ref={a.get('ref')} id={short(a.get('id'))}"
+                      f" parent={short(a.get('parentId')) or '-'} done={a.get('done')}"
+                      f": {m.group(2)[:90]}")
+        else:
+            print("  raw (first 1000 chars):\n", xml[:1000])
 
 
 def main():
