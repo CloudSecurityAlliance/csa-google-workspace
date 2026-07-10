@@ -37,6 +37,44 @@ First run opens a browser for OAuth and caches `token.json` locally.
 
 Paste back the output — especially **Test B's `RAW anchor:` lines** and **Test A's browser observation** (anchored vs file-level). That's enough to confirm or correct the reference doc, and to note it in `CHANGELOG.md`.
 
+## `extract_comments.py` — structured JSON export
+
+Extracts **all comments from any Drive file** (Docs, Sheets, Slides, Drawings, or blob files like PDFs) into structured JSON: author, timestamps, content, resolved/deleted state, `quotedFileContent`, raw anchor, and the full reply thread. For **Sheets**, it also resolves each comment's **A1 cell** best-effort by exporting XLSX and matching root comments by text.
+
+```bash
+python extract_comments.py --file-id <ID>                 # JSON to stdout
+python extract_comments.py --file-id <ID> --out out.json  # to a file
+python extract_comments.py --file-id <ID> --include-deleted
+```
+
+Reuses the same `credentials.json` / `token.json` as the probe (read-only scope). Output `*.json` in this dir is **gitignored** — it can contain real comment text and emails.
+
+### Output shape
+```jsonc
+{
+  "file":  { "id", "name", "mimeType", "type": "sheet|document|presentation|drawing|blob", "webViewLink" },
+  "extractedAt": "<ISO-8601>",
+  "counts": { "comments", "open", "resolved", "replies" },
+  "comments": [
+    {
+      "id", "createdTime", "modifiedTime", "resolved", "deleted",
+      "author": { "displayName", "emailAddress?", "me", "photoLink" },   // emailAddress often absent
+      "content",            // plain text
+      "htmlContent",        // @mentions linkified as <a href="mailto:…">
+      "quotedFileContent",  // {mimeType, value} | null
+      "anchor": { "raw",    // opaque for Sheets (workbook-range), text-region for Docs
+                  "cell" }, // A1 — Sheets only, best-effort, null if unresolved
+      "replies": [ { "id","author","createdTime","modifiedTime","action","deleted","content","htmlContent" } ]
+    }
+  ],
+  "_warnings": []  // e.g. Sheets comments whose A1 cell couldn't be resolved
+}
+```
+
+### Caveats
+- **A1 `cell` is Sheets-only and best-effort.** It joins the XLSX-exported cell refs to Drive comments *by root-comment text*; if two root comments share identical text the mapping is dropped (recorded in `_warnings`) rather than guessed. Docs/Slides/blobs get `cell: null` (the raw anchor is preserved).
+- Replies carry `action` = `resolve` / `reopen` / `null` — that's your resolution audit trail.
+
 ## Notes
 - Uses the full `drive` scope because Test A writes. For a read-only run (`--dump`/`--xlsx` only) you can narrow `SCOPES` in `probe.py` to `drive.readonly`.
 - `credentials.json` and `token.json` are secrets — they are gitignored. **Do not commit them.**
