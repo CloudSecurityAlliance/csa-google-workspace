@@ -10,7 +10,7 @@
 1. **Comments live in the Google Drive API v3, not the Sheets API.** All comment/reply CRUD goes through `/drive/v3/files/{fileId}/comments`. The Sheets API cannot create, read, or delete comments.
 2. **There are 10 methods total** — 5 on `comments`, 5 on `replies`. (An earlier draft claimed 12; there is **no `patch` method** in v3.)
 3. **You cannot reliably anchor a comment to a specific Sheets cell via the API.** Google Workspace editors treat API-created anchors as *un-anchored*. This is the central, load-bearing limitation of the whole problem space.
-4. **To map a comment back to an A1 cell, you must export the sheet as XLSX and parse the comment XML** — the Drive `anchor` field is opaque for Sheets and is not a usable read path.
+4. **To map a comment back to an A1 cell, you must export the sheet as XLSX and parse the comment XML.** The Drive `anchor` field *is* structured for Sheets (format `workbook-range`), but its `range` is an opaque internal ID — not A1 — so it isn't a usable read path. (Empirically confirmed 2026-07-09; see §7.)
 5. **If you need text truly attached to a cell, use a Sheets *note* (Sheets API), not a comment.** Notes are genuinely cell-anchored; comments are file-level in practice.
 6. `resolved` is read-only — resolve/reopen only by posting a **reply with an `action`**. Deletion is **soft**.
 
@@ -162,27 +162,43 @@ anchor = {"region": {"kind": "drive#commentRegion", "line": <n>, "rev": "head"}}
 Google explicitly says developers "can define their own format for the anchor specification" — **and that when they do, "Google Workspace editor apps treat these comments as un-anchored comments."** Anchors are also immutable and "position relative to content cannot be guaranteed between revisions."
 Source: [Manage comments and replies](https://developers.google.com/workspace/drive/api/guides/manage-comments)
 
-### What this means for Sheets (CONFIRMED)
-- **Writing a cell anchor doesn't work.** A comment created via the Drive API with an anchor targeting a cell (e.g. `AW437`) lands as a **file-level, unanchored** comment in the Sheets UI. @mentions still notify correctly; the comment is simply not tied to the cell. Corroborated by [Pipedream #18185](https://github.com/PipedreamHQ/pipedream/issues/18185) (marked *blocked*) and the [a-bonus/google-docs-mcp](https://github.com/a-bonus/google-docs-mcp) README ("Google Workspace editors treat Drive API anchors as unanchored comments").
-- **No Sheets-specific anchor structure is documented anywhere** in the public API surface.
+### What a real Sheets anchor looks like (MEASURED 2026-07-09)
+We ran a probe ([`experiments/anchor-probe`](../experiments/anchor-probe/)) against a live sheet. A comment placed on cell **B11** *in the Sheets UI* returned this `anchor` from `comments.list`:
 
-### Reading a comment's cell is a *different* mechanism (CONFIRMED)
-The Drive `anchor` is **not** a usable read path for Sheets either. The reliable, ecosystem-proven way to answer "which cell is this comment on?" is:
+```json
+{"type":"workbook-range","uid":0,"range":"1453957822"}
+```
 
-1. **Export** the spreadsheet as XLSX: `GET /drive/v3/files/{spreadsheetId}/export?mimeType=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
-2. **Unzip** and parse the Office Open XML comment parts (`xl/comments*.xml` + worksheet XML), where each comment is stored against a **cell `ref` in A1 notation**.
+So the earlier "anchors are opaque / undocumented" framing was **too strong, and partly wrong**:
+- The anchor **is** structured, and the format is **`workbook-range`** — which an earlier draft had (incorrectly) listed as unverified folklore. It is real.
+- **But it is still not A1-decodable.** `uid` is a sheet index and `range` (`"1453957822"`) is an **opaque internal range identifier**, not row/column and not `B11`. You cannot derive the cell from the anchor alone.
+
+### Writing a cell anchor doesn't work (CONFIRMED, MEASURED)
+In the same probe, a comment created via the Drive API with an anchor targeting B11 (`{"r":"head","a":[{"sht":{"sid":0,"rng":{"r":10,"c":1}}}]}`) was **stored verbatim** in the `anchor` field but **landed on A1**, not B11, in the exported sheet — i.e. the editor ignored the coordinates. Custom anchors are effectively unanchored. Corroborated by [Pipedream #18185](https://github.com/PipedreamHQ/pipedream/issues/18185) (marked *blocked*) and [a-bonus/google-docs-mcp](https://github.com/a-bonus/google-docs-mcp).
+
+### Reading a comment's cell — use XLSX export (CONFIRMED, MEASURED)
+Because the anchor's `range` is opaque, the reliable way to answer "which cell is this comment on?" is to export and parse:
+
+1. **Export** as XLSX: `GET /drive/v3/files/{spreadsheetId}/export?mimeType=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+2. **Unzip** and parse the comment parts. Sheets comments export as **threaded comments** — `xl/threadedComments/threadedComment*.xml` — and are mirrored into legacy `xl/comments*.xml` for compatibility. Both carry the cell as a **`ref` in A1 notation**:
+   ```xml
+   <threadedComment ref="B11" dT="2026-07-10T04:13:16.00" personId="…" done="0">
+     <text>THIS IS A TEST COMMENT …</text>
+   </threadedComment>
+   ```
+   (Our probe recovered `ref="B11"` for the UI comment — the mapping the Drive anchor won't give you.)
 3. Map to a clean result, e.g. `{"range": {"a1Notation": "B11", "row": 11, "col": 2}, "comment": [...]}`.
 
-This is exactly what tanaikech's [DocsServiceApp](https://github.com/tanaikech/DocsServiceApp) does; its docs state plainly that "there are no methods for retrieving the comments with the cell coordinate in the existing Google Spreadsheet service and Sheets API." See also the community thread [How to map Google Sheet Comments to an A1 range](https://support.google.com/docs/thread/234205749).
+This matches tanaikech's [DocsServiceApp](https://github.com/tanaikech/DocsServiceApp) ("there are no methods for retrieving the comments with the cell coordinate in the existing … Sheets API"). See also [How to map Google Sheet Comments to an A1 range](https://support.google.com/docs/thread/234205749).
 
-### ⚠️ Debunked folklore
-The formats below circulated in earlier drafts of this repo. **No primary source produces them as real Drive API Sheets anchors. Do not rely on them:**
+### ⚠️ Still-unobserved formats
+These circulated in earlier drafts and were **not** seen in the probe. Do not rely on them:
 - `R1C2` as a comment anchor — *R1C1 is real, but as Sheets API **range** notation (`Sheet1!R1C1:R2C2`), not a comment anchor.*
 - `sheet_id=123456&range=A1` query-style anchors — no source.
-- `{"a":[{"type":"cell_classifier","row":N,"column":N}]}` / `range_classifier` / `workbook-range` JSON — no source; these were self-flagged as "requires reverse engineering" in the original doc, i.e. hypotheses.
+- `{"a":[{"type":"cell_classifier",…}]}` / `range_classifier` / the `{a:[{sht:{sid,rng:{r,c}}}]}` shape a-bonus's code parses — **not** what a real UI comment returns (which is `workbook-range` with an opaque id). See [`server-landscape.md`](./server-landscape.md#open-discrepancy).
 - `anchor=kix.XXXX` — `kix` is the **Google Docs** editor's internal namespace, not Sheets.
 
-Bottom line: **real Sheets comment anchors are opaque.** Treat the anchor as unusable for Sheets in both directions.
+Bottom line: the Sheets anchor is **structured but not A1-decodable** (`workbook-range` + opaque range id). Treat it as unusable *for writes* and *for deriving A1 on reads* — use XLSX export to recover the cell.
 
 Tracker references (behavior confirmed; exact current status is sign-in-gated and unverified): [#292610078](https://issuetracker.google.com/issues/292610078), [#357985444](https://issuetracker.google.com/issues/357985444).
 
