@@ -9,10 +9,11 @@ Research on how **comments on Google Drive / Google Sheets files** work via the 
 | Document | What it is |
 |----------|------------|
 | [`research/google-drive-comments-reference.md`](./research/google-drive-comments-reference.md) | **Start here.** The canonical reference on how Drive/Sheets comments actually work: the 10 API methods, fields, resolution/deletion models, OAuth scopes, and the hard truth about the `anchor` field for Sheets. |
+| [`research/docs-suggestions-reference.md`](./research/docs-suggestions-reference.md) | How Google Docs **suggestions** behave via the API: readable (incl. accepted/rejected previews), but **no accept/reject endpoint** and no author exposed. Empirically measured. |
 | [`research/mcp-server-design.md`](./research/mcp-server-design.md) | Design for a comment-management MCP server, with a 2026 reality check and a revised, still-viable scope. |
 | [`research/mcp-protocol-notes.md`](./research/mcp-protocol-notes.md) | Concise, current MCP protocol orientation (spec `2025-11-25`, transports, primitives). |
 | [`research/server-landscape.md`](./research/server-landscape.md) | Source-verified survey of existing MCP servers that handle Google comments, ranked, with a recommendation. |
-| [`experiments/anchor-probe/`](./experiments/anchor-probe/) | Runnable script to empirically confirm how Sheets comment anchors behave (settles the one doc-only claim). |
+| [`experiments/`](./experiments/) | Runnable **empirical probes** (with dated `RESULTS.md` each): `anchor-probe` (Sheets anchors), `comment-lifecycle` (create/resolve/delete semantics), `docs-suggestions` (read vs accept/reject). |
 | [`CHANGELOG.md`](./CHANGELOG.md) | What changed in each refresh, and why. |
 
 ## The three things worth knowing

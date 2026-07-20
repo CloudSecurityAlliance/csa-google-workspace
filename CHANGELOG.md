@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-07-20 — Lifecycle & suggestions probes (empirical)
+
+Two new live-API probes under `experiments/`, each with a `RESULTS.md`, plus an
+`experiments/README.md` index and shared-setup guide.
+
+- **`experiments/comment-lifecycle/`** — exercised the full comment/reply cycle on a
+  self-created, self-trashed throwaway Sheet. **Corrected two things in the reference doc:**
+  (1) `resolved` is **absent** on a fresh comment, not `false` — it appears only after a
+  resolve/reopen action (treat missing as false); (2) delete is soft and strips **author**
+  as well as content, and the comment drops out of `comments.list` unless `includeDeleted=true`.
+  Also confirmed: action-replies (`resolve`/`reopen`) can be **content-less**, `author.me`
+  exists, and `emailAddress` is withheld even when requested.
+- **`experiments/docs-suggestions/`** — settled the Docs "suggesting mode" question against a
+  live doc. **Reading suggestions works** (via `suggestionsViewMode`, incl. accepted/rejected
+  text previews), but **accepting/rejecting is impossible via the API** — proven by enumerating
+  the entire Docs API surface (3 methods, 40 `batchUpdate` request types → zero suggestion ops).
+  Suggestion **author/timestamp is not exposed**. Bonus: Docs comments carry `kix.*` anchors
+  **and populated `quotedFileContent`**, so Docs comment→location mapping is trivial (unlike Sheets).
+- **New reference:** `research/docs-suggestions-reference.md` (suggestions are read-only;
+  no accept/reject; author unavailable; UI-automation is the only path to accept/reject).
+- **Setup finding:** a correctly-scoped OAuth token still 403s with `SERVICE_DISABLED` until
+  each API (Docs/Sheets/Slides) is separately enabled in the Cloud project — scope ≠ enablement.
+
 ## 2026-07-09 — Structured comment extractor
 
 Added `experiments/anchor-probe/extract_comments.py`: extracts **all comments from any Drive file type** (Docs/Sheets/Slides/Drawings/blobs) into structured JSON — author, timestamps, content/htmlContent, resolved/deleted, quotedFileContent, raw anchor, and full reply threads (with `resolve`/`reopen` actions). For Sheets it resolves each comment's **A1 cell** best-effort via the XLSX-export join. Verified against the live sheet: correctly mapped the UI comment to B11 and the mislanded API comment to A1, with threads intact. Notes captured: `author.emailAddress` is often absent; @mentions are plain text in `content` but linkified in `htmlContent`. Extractor JSON output is gitignored (may contain real comment data).
