@@ -167,9 +167,11 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# OAuth secrets for experiments/ — never commit
+# OAuth secrets + extracted data for experiments/ — never commit
 credentials.json
 token.json
+# extractor output may contain real comment content/emails — keep it local
+experiments/anchor-probe/*.json
 
 # Ruff stuff:
 .ruff_cache/

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-09 — Structured comment extractor
+
+Added `experiments/anchor-probe/extract_comments.py`: extracts **all comments from any Drive file type** (Docs/Sheets/Slides/Drawings/blobs) into structured JSON — author, timestamps, content/htmlContent, resolved/deleted, quotedFileContent, raw anchor, and full reply threads (with `resolve`/`reopen` actions). For Sheets it resolves each comment's **A1 cell** best-effort via the XLSX-export join. Verified against the live sheet: correctly mapped the UI comment to B11 and the mislanded API comment to A1, with threads intact. Notes captured: `author.emailAddress` is often absent; @mentions are plain text in `content` but linkified in `htmlContent`. Extractor JSON output is gitignored (may contain real comment data).
+
+## 2026-07-09 — Anchor probe run: empirical correction
+
+Ran `experiments/anchor-probe` against a live sheet. Results captured in `experiments/anchor-probe/RESULTS.md`. This **corrected a conclusion** in the reference doc:
+
+- **"Sheets anchors are opaque" was too strong.** A UI-placed comment's real anchor is `{"type":"workbook-range","uid":0,"range":"1453957822"}` — **structured**, format `workbook-range` (which a prior entry wrongly called folklore). But `range` is an opaque internal id, so the anchor is still **not A1-decodable**. Reworded §7 and the TL;DR accordingly; moved `workbook-range` out of the "folklore" list.
+- **Write limitation confirmed empirically:** an API comment anchored to B11 was stored verbatim but landed on A1 in the export — the editor ignores anchor coordinates.
+- **XLSX read path confirmed empirically:** comments export to `xl/threadedComments/threadedComment*.xml` (mirrored in `xl/comments*.xml`) with real A1 `ref`s (recovered `ref="B11"`). Sheets comments are *threaded comments*.
+- **Resolved the a-bonus discrepancy:** its `{a:[{sht:{rng:{r,c}}}]}` parser shape is not what real UI comments return; the anchor is not an A1 source. Updated `server-landscape.md`.
+
 ## 2026-07-09 — Server landscape & anchor probe
 
 Added, without changing existing conclusions:

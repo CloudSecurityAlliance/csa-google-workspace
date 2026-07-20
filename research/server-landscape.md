@@ -48,6 +48,9 @@
 
 **Recommendation:** `a-bonus/google-docs-mcp` for comment quality on Sheets; `taylorwilsdon/google_workspace_mcp` if breadth and enterprise auth outweigh Sheets-comment precision.
 
-## Open discrepancy
+## Open discrepancy — RESOLVED (measured 2026-07-09)
 
-`a-bonus`'s `commentAnchor.ts` parses a concrete Sheets anchor structure — `{ a: [{ sht: { sid, rng: {r, c} } }] }`. If UI-created Sheets comments really carry that, then the read path is **anchor-parseable**, partly contradicting the reference doc's "anchors are opaque, use XLSX-export" conclusion. This is a *different* shape from the `cell_classifier` folklore we debunked, so both can hold. **Unresolved until measured** — the [`experiments/anchor-probe`](../experiments/anchor-probe/) script dumps a real anchor to settle it; findings will be folded back into the reference doc.
+`a-bonus`'s `commentAnchor.ts` parses a Sheets anchor shape `{ a: [{ sht: { sid, rng: {r, c} } }] }`, which raised the question of whether the read path is anchor-parseable after all. The [`anchor-probe`](../experiments/anchor-probe/) settled it against a live sheet: a UI-placed comment on B11 returns `{"type":"workbook-range","uid":0,"range":"1453957822"}` — **not** the `{a:[…]}` r/c shape. So:
+
+- The read path is **not** anchor-parseable to A1: the real anchor's `range` is an opaque internal id. a-bonus's `{a:[…]}` parser does not match what real UI comments return (it likely only handles anchors it created itself, or is aspirational).
+- The reference doc's XLSX-export conclusion **stands** and was confirmed (comments export to `xl/threadedComments/*.xml` with `ref="B11"`). Its "opaque" wording was corrected to "structured (`workbook-range`) but not A1-decodable." See [`google-drive-comments-reference.md` §7](./google-drive-comments-reference.md#7-the-anchor-field--the-hard-truth-for-sheets).
