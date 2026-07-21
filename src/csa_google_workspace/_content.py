@@ -28,3 +28,20 @@ def doc_paragraphs(document: dict) -> list[str]:
         if "paragraph" in el:
             out.append(_para_text(el["paragraph"]).rstrip("\n"))
     return out
+
+
+def slide_text(slide: dict) -> str:
+    parts = []
+    for pe in slide.get("pageElements", []):
+        for te in pe.get("shape", {}).get("text", {}).get("textElements", []):
+            parts.append(te.get("textRun", {}).get("content", ""))
+    return "".join(parts)
+
+
+def slide_notes(slide: dict) -> str:
+    notes = (slide.get("slideProperties", {}).get("notesPage", {}))
+    return "".join(
+        te.get("textRun", {}).get("content", "")
+        for pe in notes.get("pageElements", [])
+        for te in pe.get("shape", {}).get("text", {}).get("textElements", [])
+    )
