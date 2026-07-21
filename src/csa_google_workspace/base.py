@@ -39,6 +39,9 @@ class Document(CommentsMixin):
     def reload(self) -> None:
         """Drop cached state (none yet in Phase 1)."""
 
+    def export(self, mime_type: str) -> bytes:
+        return self._backend.export_file(self.id, mime_type)
+
 
 def subclass_for_mime(mime: str) -> type[Document]:
     if mime not in MIME_TO_TYPE:

@@ -22,15 +22,26 @@ class Backend(Protocol):
     def update_reply(self, file_id: str, comment_id: str, reply_id: str, content: str) -> dict: ...
     def delete_comment(self, file_id: str, comment_id: str) -> None: ...
     def delete_reply(self, file_id: str, comment_id: str, reply_id: str) -> None: ...
+    def export_file(self, file_id: str, mime_type: str) -> bytes: ...
+    def get_document(self, file_id: str) -> dict: ...
+    def get_spreadsheet(self, file_id: str) -> dict: ...
+    def get_values(self, file_id: str, a1_range: str) -> list: ...
+    def get_presentation(self, file_id: str) -> dict: ...
 
 
 class FakeBackend:
     """In-memory backend for unit tests. `files` maps file_id -> metadata dict."""
 
-    def __init__(self, files: dict[str, dict]):
+    def __init__(self, files, *, documents=None, spreadsheets=None,
+                 values=None, presentations=None, exports=None):
         self._files = files
-        self._comments: dict[str, dict] = {}
+        self._comments = {}
         self._seq = 0
+        self._documents = documents or {}
+        self._spreadsheets = spreadsheets or {}
+        self._values = values or {}
+        self._presentations = presentations or {}
+        self._exports = exports or {}
 
     def get_file_metadata(self, file_id: str) -> dict:
         try:
@@ -117,6 +128,27 @@ class FakeBackend:
                 return
         raise exc.NotFoundError(f"reply '{reply_id}' not found")
 
+    def _fixture(self, store, key, kind):
+        # `copy` is already imported at the top of backend.py (from the Phase-2 deep-copy fix).
+        if key not in store:
+            raise exc.NotFoundError(f"{kind} '{key}' not found")
+        return copy.deepcopy(store[key])
+
+    def export_file(self, file_id, mime_type):
+        return self._fixture(self._exports, (file_id, mime_type), "export")
+
+    def get_document(self, file_id):
+        return self._fixture(self._documents, file_id, "document")
+
+    def get_spreadsheet(self, file_id):
+        return self._fixture(self._spreadsheets, file_id, "spreadsheet")
+
+    def get_values(self, file_id, a1_range):
+        return copy.deepcopy(self._values.get((file_id, a1_range), []))
+
+    def get_presentation(self, file_id):
+        return self._fixture(self._presentations, file_id, "presentation")
+
 
 class ApiBackend:
     """Real backend over google-api-python-client. `services` is a ServiceRegistry (Task 4)."""
@@ -198,3 +230,23 @@ class ApiBackend:
     def delete_reply(self, file_id, comment_id, reply_id):
         _errors.call(self._services.drive.replies().delete(
             fileId=file_id, commentId=comment_id, replyId=reply_id).execute)
+
+    def export_file(self, file_id, mime_type):
+        return _errors.call(self._services.drive.files()
+                            .export(fileId=file_id, mimeType=mime_type).execute)
+
+    def get_document(self, file_id):
+        return _errors.call(self._services.docs.documents().get(documentId=file_id).execute)
+
+    def get_spreadsheet(self, file_id):
+        return _errors.call(self._services.sheets.spreadsheets()
+                            .get(spreadsheetId=file_id,
+                                 fields="sheets(properties(sheetId,title))").execute)
+
+    def get_values(self, file_id, a1_range):
+        resp = _errors.call(self._services.sheets.spreadsheets().values()
+                            .get(spreadsheetId=file_id, range=a1_range).execute)
+        return resp.get("values", [])
+
+    def get_presentation(self, file_id):
+        return _errors.call(self._services.slides.presentations().get(presentationId=file_id).execute)
