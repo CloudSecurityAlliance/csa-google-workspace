@@ -98,7 +98,8 @@ Workspace.from_oauth(
     token_path="~/.csa_google_workspace/token.json",   # cached; auto-refreshes
     read_only=False,                                    # writes ON by default
 )
-Workspace(credentials=my_google_credentials)            # advanced: bring your own Credentials
+Workspace.from_credentials(my_google_credentials)       # BYO credentials (user OAuth or service account)
+Workspace(backend=my_backend)                           # advanced: inject a backend (service / custom / tests)
 ```
 
 - **Scopes** are chosen from `read_only`:

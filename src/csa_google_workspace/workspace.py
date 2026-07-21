@@ -29,10 +29,16 @@ class Workspace:
         return self.open(url)
 
     @classmethod
+    def from_credentials(cls, credentials, read_only: bool = False) -> "Workspace":
+        """Bring your own credentials: wrap any google.auth Credentials
+        (a user's OAuth credentials, or a service account's) into a Workspace."""
+        from ._services import ServiceRegistry
+        return cls(ApiBackend(ServiceRegistry(credentials)), read_only=read_only)
+
+    @classmethod
     def from_oauth(cls, client_secrets: str,
                    token_path: str = "~/.csa_google_workspace/token.json",
                    read_only: bool = False) -> "Workspace":
         from .auth import load_credentials
-        from ._services import ServiceRegistry
         creds = load_credentials(client_secrets, token_path, read_only)
-        return cls(ApiBackend(ServiceRegistry(creds)), read_only=read_only)
+        return cls.from_credentials(creds, read_only=read_only)

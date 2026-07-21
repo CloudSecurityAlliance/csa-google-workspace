@@ -39,3 +39,15 @@ def test_open_by_url_extracts_id_then_opens():
 def test_read_only_propagates_to_document():
     ws = Workspace(FakeBackend(FILES), read_only=True)
     assert ws.open("d1").read_only is True
+
+
+def test_from_credentials_wires_apibackend_and_propagates_read_only():
+    from csa_google_workspace.backend import ApiBackend
+    ws = Workspace.from_credentials("sentinel-creds", read_only=True)
+    assert ws.read_only is True
+    assert isinstance(ws._backend, ApiBackend)
+
+
+def test_from_credentials_defaults_to_read_write():
+    ws = Workspace.from_credentials("sentinel-creds")
+    assert ws.read_only is False
