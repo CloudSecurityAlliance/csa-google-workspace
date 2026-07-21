@@ -38,6 +38,13 @@ def test_deleted_comment_tolerates_missing_author_and_content():
     assert c.deleted is True and c.author is None and c.content is None
 
 
+def test_deleted_reply_tolerates_missing_author_and_content():
+    r = Reply.from_api({"id": "r9", "deleted": True, "createdTime": "2026-07-20T23:06:00Z"})
+    assert r.deleted is True
+    assert r.author is None
+    assert r.content is None
+
+
 def test_quoted_text_extracted():
     d = {**FRESH, "quotedFileContent": {"mimeType": "text/html", "value": "the text"}}
     assert Comment.from_api(d).quoted_text == "the text"
