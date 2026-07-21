@@ -81,3 +81,13 @@ def test_replies_from_collection_are_mutable():
     refetched = d.comments.get(c.id)          # replies come via _wrap
     refetched.replies[0].edit("via collection")
     assert refetched.replies[0].content == "via collection"
+
+
+def test_delete_also_strips_replies_in_place():
+    d = doc()
+    c = d.create_comment("bye")
+    c.reply("a reply")
+    c.delete()
+    assert c.replies[0].deleted is True
+    assert c.replies[0].content is None
+    assert c.replies[0].author is None

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .exceptions import ReadOnlyError
 
@@ -137,6 +137,11 @@ class Comment:
         self._guard()
         self._backend.delete_comment(self._file_id, self.id)
         self.deleted = True; self.content = None; self.html_content = None; self.author = None
+        for r in self.replies:
+            r.deleted = True
+            r.content = None
+            r.html_content = None
+            r.author = None
 
     def _attach_reply(self, r: "Reply") -> None:
         r._backend = self._backend; r._file_id = self._file_id
@@ -170,7 +175,10 @@ class CommentCollection:
 
     def filter(self, *, resolved: bool | None = None, author: str | None = None,
                since: "datetime | None" = None, include_deleted: bool = False) -> list["Comment"]:
-        smt = since.isoformat().replace("+00:00", "Z") if since else None
+        smt = None
+        if since is not None:
+            aware = since if since.tzinfo else since.replace(tzinfo=timezone.utc)
+            smt = aware.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
         raw = self._backend.list_comments(self._file_id, include_deleted=include_deleted,
                                           start_modified_time=smt)
         out = []

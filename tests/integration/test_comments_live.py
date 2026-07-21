@@ -9,7 +9,6 @@ pytestmark = pytest.mark.skipif(
 
 def test_full_comment_lifecycle_live():
     from csa_google_workspace import Workspace
-    from googleapiclient.discovery import build
 
     ws = Workspace.from_oauth(os.environ["CSA_GW_CLIENT_SECRETS"])
     drive = ws._backend._services.drive

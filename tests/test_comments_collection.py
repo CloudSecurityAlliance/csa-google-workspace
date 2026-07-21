@@ -23,7 +23,7 @@ def test_get_by_id():
     assert d.comments.get(c.id).id == c.id
 
 
-def test_filter_by_resolved(monkeypatch):
+def test_filter_by_resolved():
     d = open_doc()
     a = d.create_comment("open one")
     b = d.create_comment("to resolve")
@@ -36,3 +36,11 @@ def test_create_comment_blocked_when_read_only():
     d = open_doc(read_only=True)
     with pytest.raises(exc.ReadOnlyError):
         d.create_comment("nope")
+
+
+def test_filter_by_since():
+    d = open_doc()
+    d.create_comment("c")
+    # FakeBackend comments carry a fixed ~2026 modifiedTime: a past `since` includes, a future one excludes
+    assert len(d.comments.filter(since=datetime(2020, 1, 1, tzinfo=timezone.utc))) == 1
+    assert d.comments.filter(since=datetime(2030, 1, 1, tzinfo=timezone.utc)) == []

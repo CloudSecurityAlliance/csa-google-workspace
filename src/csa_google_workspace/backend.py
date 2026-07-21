@@ -58,6 +58,8 @@ class FakeBackend:
         out = [c for (f, _), c in self._comments.items() if f == file_id]
         if not include_deleted:
             out = [c for c in out if not c.get("deleted")]
+        if start_modified_time:
+            out = [c for c in out if c.get("modifiedTime", "") >= start_modified_time]
         return [copy.deepcopy(c) for c in out]
 
     def get_comment(self, file_id, comment_id):
