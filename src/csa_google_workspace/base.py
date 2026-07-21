@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from .backend import Backend
 from . import exceptions as exc
+from .comments import CommentCollection, Comment
 
 MIME_TO_TYPE = {
     "application/vnd.google-apps.document": "document",
@@ -11,7 +12,19 @@ MIME_TO_TYPE = {
 }
 
 
-class Document:
+class CommentsMixin:
+    @property
+    def comments(self) -> CommentCollection:
+        return CommentCollection(self._backend, self.id, self.read_only)
+
+    def create_comment(self, content: str) -> Comment:
+        if self.read_only:
+            raise exc.ReadOnlyError("workspace is read_only; cannot create a comment")
+        d = self._backend.create_comment(self.id, content)
+        return self.comments._wrap(d)
+
+
+class Document(CommentsMixin):
     """Abstract base. Never instantiated directly — use Workspace.open()."""
 
     def __init__(self, backend: Backend, metadata: dict, read_only: bool):
