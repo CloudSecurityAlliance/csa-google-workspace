@@ -29,7 +29,7 @@ semantics, Sheets cell-mapping, suggestion reading, and a uniform door across th
 - **Sheets cell mapping**: best-effort comment → A1 via XLSX export (read side).
 
 ### Out of scope
-- **Accepting/rejecting suggestions** — no API exists (§9; proven by probe). Deferred to a future
+- **Accepting/rejecting suggestions** — no API exists (§7; proven by probe). Deferred to a future
   UI-automation backend.
 - **Creating cell-anchored comments** — impossible via the API (Sheets comments are file-level).
 - **File management** (upload/move/permissions), Gmail/Calendar/etc., real-time collaboration.
@@ -106,6 +106,9 @@ Workspace(credentials=my_google_credentials)            # advanced: bring your o
   - `read_only=True` → the `.readonly` variants (`drive.readonly`, `documents.readonly`,
     `spreadsheets.readonly`, `presentations.readonly`) — defense-in-depth: even a bug cannot write.
 - First run opens a browser and caches a refresh token; subsequent runs refresh silently.
+- **Mode switching needs re-consent.** A token cached under `read_only=True` holds only `.readonly`
+  scopes; later opening with `read_only=False` needs broader scopes. `auth.py` must detect the scope
+  mismatch on the cached token and re-consent, rather than failing later with an opaque 403.
 - **API enablement is separate from scope** (MEASURED: a scoped token still returns
   `403 SERVICE_DISABLED` until each API is enabled in the Cloud project). See §11 error handling.
 
@@ -190,7 +193,7 @@ class CommentCollection:     # doc.comments
 
 # on every Document (via CommentsMixin):
 doc.comments                      # -> CommentCollection
-doc.create_comment(text, anchor=None) -> Comment
+doc.create_comment(text) -> Comment      # file-level; NO anchor param in v1 (see §8, §14.6)
 ```
 
 ### Behavioral contract (all MEASURED)
@@ -205,14 +208,31 @@ doc.create_comment(text, anchor=None) -> Comment
   bare `replies` come back empty.
 - **Filtering**: `since` maps to server-side `startModifiedTime`; `include_deleted` to `includeDeleted`;
   `resolved`/`author` are applied client-side. Filtering is a first-class feature because large files
-  overflow an LLM context window.
+  overflow an LLM context window. (Note: `resolved`/`author` filtering still fetches all comments over
+  the wire — it trims what reaches the caller/LLM, not what the API returns.)
+
+### Object lifecycle (statefulness)
+Model objects are **live for their own mutations, snapshots for everyone else's.** An action **updates
+the object in place**: `comment.resolve()` sets `comment.resolved = True` and appends the action `Reply`
+to `comment.replies`; `comment.reply(...)` appends; `comment.delete()` sets `deleted = True` and clears
+`content`/`author` to mirror the server. But an object is **not** a live view of the file — edits made by
+*other* users after the read are not reflected until `doc.reload()` (consistent with caching-off, §9).
+
+### Author identity is limited (accepted)
+Because `Author.email` is usually `None` (measured), the only *reliable* identity signal is `is_me`
+("mine vs theirs"). Attributing a comment to a *specific other* person rests on `display_name`, which is
+not unique. Adequate for triage; a hard requirement to identify individuals would push toward a different
+auth model (e.g. a service account with directory access) — out of scope for v1.
 
 ---
 
 ## 6. Content read/write — the variant axis
 
-Two conveniences on the base (`as_text`, `export`); everything else is type-specific. **Writes obey
-`read_only`**: when `read_only=True`, every mutating call (content *and* comments) raises `ReadOnlyError`.
+Two **conveniences** on the base (`as_text`, `export`); everything else is type-specific. `as_text()` is a
+best-effort flattening for LLM context, **not a uniform contract** — it means genuinely different things
+per type (a doc's prose; a sheet's tab-joined grid, which can be huge; a deck's slide text), and `Doc`
+overrides it with a `suggestions=` parameter the others lack. **Writes obey `read_only`**: when
+`read_only=True`, every mutating call (content *and* comments) raises `ReadOnlyError`.
 
 ### `Doc` (`documents/doc.py`) — Docs API v1
 ```python
@@ -244,13 +264,17 @@ sheet.create_comment(text, cell="B11")          # file-level comment + clickable
 slides.slides                                   # list[Slide]; slide.as_text(), slide.notes
 slides.as_text()
 slides.replace_text("old", "new")               # deck-wide replaceAllText
-slides[2].insert_text("…")                       # per-slide (targets the slide's text shapes)
+slides[2].insert_text("…")                       # PROVISIONAL — per-shape targeting unresolved (see §14.3)
 slides.batch_update([...])
 ```
 
 **Index safety (Docs/Slides):** `insert/delete` shift downstream indices, so multi-edit batches are
 applied **back-to-front** by the helpers. `replace_text`/`append_text` are index-free and are the
 recommended path; `batch_update` is the escape hatch for anything unwrapped.
+
+> **Trade-off (accepted):** `batch_update()` takes **raw Google API request dicts**, so callers using it
+> couple to `google-api-python-client` request shapes — a deliberate hole in the abstraction so we never
+> *block* an advanced edit we didn't wrap. The high-level helpers are the clean, stable surface.
 
 ---
 
@@ -294,7 +318,10 @@ class Location:              # comment.location for a Sheet (None when unresolve
 
 - The Drive `anchor` for Sheets is `{"type":"workbook-range","range":"<opaque id>"}` — **not**
   A1-decodable. Mapping requires **XLSX export** → parse `xl/threadedComments/*.xml` (`ref="B11"`)
-  → match to Drive comments by **author + content + timestamp**.
+  → match back to Drive comments. **The match key is weaker than it first looks:** the XLSX author is an
+  opaque `personId` (resolving it to a name needs `xl/persons/person*.xml`), and the XLSX `dT` timestamp's
+  correlation with the Drive `createdTime` is **unverified** (deferred probe below). In practice the
+  reliable key may reduce to **content + approximate time**, which collides when one author repeats text.
 - `comment.location` is populated lazily on first access; the export + parse + match result is cached
   per file. Matching is **heuristic**: on no confident match it yields `None` — never a wrong guess.
 - **Creating** a cell-anchored comment is impossible; `sheet.create_comment(text, cell=...)` makes a
@@ -344,9 +371,10 @@ Transient `429`/`5xx` are retried with backoff; everything else raises immediate
 
 ## 11. Testing (`pytest`)
 
-- Unit tests inject a **`FakeBackend`** (recorded API responses, including the probe transcripts) —
-  no network, no credentials. This exercises the entire domain layer (threading, resolve/delete
-  normalization, cell matching, suggestion grouping, error mapping).
+- Unit tests inject a **`FakeBackend`** replaying **sanitized/synthetic fixtures** derived from the probe
+  transcripts (the raw transcripts are gitignored — they hold real emails/comment text, so fixtures must
+  be scrubbed before committing) — no network, no credentials. This exercises the entire domain layer
+  (threading, resolve/delete normalization, cell matching, suggestion grouping, error mapping).
 - Heaviest coverage on the fragile bits: **cell mapping** (synthetic XLSX fixture: merged cells,
   multiple tabs, named ranges, duplicate author+text), **`resolved` absent⇒false**, **deleted-comment
   field stripping**, **suggestion run-grouping**, **error classification** (esp. `SERVICE_DISABLED`).
@@ -371,8 +399,18 @@ milestone early:
 ---
 
 ## 13. Future directions (not in v1)
-- **`PlaywrightBackend`** — drive the real Docs/Sheets UI to reach what the APIs cannot: accepting/
-  rejecting suggestions and true cell-anchored comments. The `Backend` seam exists for this.
+- **`PlaywrightBackend`** — the long-term plan for operations the APIs cannot do (accept/reject
+  suggestions; true cell-anchored Sheets comments). A browser drives the real editor UI. Principle:
+  **API-first, UI-automation only for the genuinely-impossible** — never for something the API can do.
+  Because callers only touch the public API (`suggestion.accept()`), adding it later is a config change,
+  not an API change: `ApiBackend` raises `UnsupportedOperation` today; a `PlaywrightBackend` fulfils it
+  tomorrow (hybrid per-operation routing). **Hard problems to solve first:** browser auth ≠ API auth (a
+  logged-in *session*/cookies, 2FA, expiry — the biggest hurdle and a security concern); UI fragility
+  (Google restyles without notice); speed (seconds/op, needs a browser present); Terms-of-Service.
+  **Alternatives considered:** the editor's undocumented internal RPC (faster, more fragile, higher ToS
+  risk) and Apps Script (likely the same suggestion gap). **Phasing:** before building, a throwaway
+  `experiments/playwright-accept/` **spike** answers the riskiest question first — "can we hold a usable
+  authenticated browser session and reliably click Accept?" — documented in the same empirical style.
 - **MCP server wrapper** — expose the library's operations as MCP tools.
 - **Async API** — v1 is synchronous (matches `google-api-python-client`, `gspread`); async could layer later.
 
@@ -384,3 +422,7 @@ milestone early:
 3. **Slides per-shape editing** — object-ID targeting is the least-specified write surface; keep to
    deck-wide `replace_text` + `batch_update` until validated.
 4. **Multi-writer staleness** — mitigated by caching-off default; document that reads are point-in-time.
+5. **`read_only` → read-write mode switching** — a cached narrow-scope token needs detected re-consent (§3).
+6. **Docs comment *creation* anchoring** — reading Docs anchors works (`quoted_text`), but creating a
+   *text-anchored* Docs comment via the API is unverified; v1 creates file-level only. A probe should
+   confirm whether Docs-create anchoring is worth adding later.
