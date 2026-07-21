@@ -49,3 +49,35 @@ def test_mutation_blocked_when_read_only():
     c._read_only = True
     with pytest.raises(exc.ReadOnlyError):
         c.resolve()
+
+
+def test_reply_edit_and_delete_in_place():
+    d = doc()
+    c = d.create_comment("q")
+    r = c.reply("orig")
+    r.edit("edited")
+    assert r.content == "edited"
+    r.delete()
+    assert r.deleted is True
+    assert r.content is None
+    assert r.author is None
+
+
+def test_reply_mutation_blocked_when_read_only():
+    d = doc()
+    c = d.create_comment("q")
+    r = c.reply("x")
+    r._read_only = True
+    with pytest.raises(exc.ReadOnlyError):
+        r.edit("nope")
+    with pytest.raises(exc.ReadOnlyError):
+        r.delete()
+
+
+def test_replies_from_collection_are_mutable():
+    d = doc()
+    c = d.create_comment("q")
+    c.reply("orig")
+    refetched = d.comments.get(c.id)          # replies come via _wrap
+    refetched.replies[0].edit("via collection")
+    assert refetched.replies[0].content == "via collection"
