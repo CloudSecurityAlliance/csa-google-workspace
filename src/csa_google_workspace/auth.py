@@ -32,7 +32,10 @@ def load_credentials(client_secrets: str, token_path: str, read_only: bool) -> C
         creds.refresh(Request())
     else:
         creds = InstalledAppFlow.from_client_secrets_file(client_secrets, required).run_local_server(port=0)
-    os.makedirs(os.path.dirname(token_path) or ".", exist_ok=True)
-    with open(token_path, "w") as f:
+    token_dir = os.path.dirname(token_path) or "."
+    os.makedirs(token_dir, exist_ok=True)
+    os.chmod(token_dir, 0o700)
+    fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
         f.write(creds.to_json())
     return creds

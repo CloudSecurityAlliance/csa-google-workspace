@@ -25,4 +25,6 @@ def test_document_exposes_metadata():
             "webViewLink": "https://docs.google.com/document/d/d1/edit"}
     d = Doc(FakeBackend({}), meta, read_only=False)
     assert (d.id, d.name, d.type, d.read_only) == ("d1", "My Doc", "document", False)
+    assert d.url == "https://docs.google.com/document/d/d1/edit"
+    assert d.mime_type == DOC_MIME
     assert isinstance(d, Document)
