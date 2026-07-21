@@ -65,6 +65,12 @@ Reference: <https://developers.google.com/workspace/drive/api/reference/rest/v3/
 | `deleted` | boolean | No |
 | `replies[]` | array of `Reply` | No |
 
+> **`resolved` is ABSENT until first resolved (MEASURED 2026-07-20).** On a freshly
+> created comment the `resolved` key is **not present at all** — it only appears once a
+> `resolve`/`reopen` action has ever occurred on the thread. Treat a **missing `resolved`
+> as `false`**; do not assume the field is always returned. Likewise `anchor` and
+> `quotedFileContent` are omitted when empty. See [`experiments/comment-lifecycle`](../experiments/comment-lifecycle/).
+
 ### `comments.list` parameters
 
 | Parameter | Notes |
@@ -131,6 +137,8 @@ Source: [Manage comments and replies](https://developers.google.com/workspace/dr
 ## 5. Deletion model
 
 Deletion is **soft** for both comments and replies. Drive marks the resource `deleted: true` and strips `content`/`htmlContent`; the record is retained to preserve thread structure. Only the author (or file owner, per permissions) may delete.
+
+> **MEASURED 2026-07-20.** A deleted comment (a) **disappears from `comments.list` by default** — you must pass `includeDeleted=true` to see it — and (b) comes back stripped of **`author` as well as content** (only `id`, timestamps, `deleted:true`, and `replies` remain; each reply also flips `deleted:true`). Any code reading a deleted comment must tolerate a **missing author**. See [`experiments/comment-lifecycle`](../experiments/comment-lifecycle/). *(Also confirmed there: a reply with `{"action":"resolve"|"reopen"}` and **no content** is accepted, and `resolved` on the parent flips accordingly — so resolve/reopen need not carry text.)*
 
 ---
 
@@ -218,6 +226,7 @@ Three real, ecosystem-used patterns:
 
 ## 9. File-type support notes
 - **Anchored comments** are supported for Google Workspace editor files *in principle* (Docs honors text-range anchors better than Sheets does).
+- **Docs comments anchor well and are self-describing (MEASURED 2026-07-20).** A UI comment on a Doc returns a `kix.*` anchor **and a populated `quotedFileContent`** (the exact text the comment sits on) — e.g. `anchor:"kix.nhqmp3maw4gt"`, `quotedFileContent.value:"This is a suggested"`. So Docs comment→location mapping is trivial from the API alone, unlike Sheets (which needs the XLSX-export detour in §7). Measured via [`experiments/docs-suggestions`](../experiments/docs-suggestions/).
 - **Blob (non-Google) files** support **unanchored comments only**.
 - Sheets is the problematic case: anchors are accepted by the API but not honored by the editor.
 

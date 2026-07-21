@@ -170,8 +170,10 @@ cython_debug/
 # OAuth secrets + extracted data for experiments/ — never commit
 credentials.json
 token.json
-# extractor output may contain real comment content/emails — keep it local
+token_full.json
+# extractor / probe output may contain real comment content/emails — keep it local
 experiments/anchor-probe/*.json
+experiments/**/*_transcript.json
 
 # Ruff stuff:
 .ruff_cache/
