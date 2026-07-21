@@ -1,41 +1,56 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) when working in this repository.
 
 ## What this repository is
 
-This is a **research and design repository**, not an implemented codebase. There is no source code, build system, or test suite yet. It contains the specification for a future Model Context Protocol (MCP) server that manages **comments on Google Drive files (with a focus on Google Sheets)**. When implementation begins, the design in `research/` is the blueprint to follow.
+`csa-google-workspace` — a **Python library** (import name `csa_google_workspace`) for managing **comments** and (planned) **content** on Google **Docs, Sheets, and Slides**. It is **under active, phased development**: research and design are done and merged; the code is being built one reviewed phase at a time.
 
-All content lives in `research/`:
+- **Shipped:** Phase 1 (foundations) + Phase 2 (full comment management). The library can open a Doc/Sheet/Slides by id/URL and list/filter/create/reply/resolve/reopen/edit/soft-delete comments across all three, uniformly.
+- **Planned (see `docs/superpowers/plans/`):** content read (`as_text`/`export`, `Doc.paragraphs`/`Sheet.values`/`Slides.slides`), Sheets cell-mapping (`Comment.location`), content write, and reading Docs suggestions.
 
-- **`Google Sheets Comments MCP Server - Design Document.md`** — the authoritative build spec: MCP tool definitions (with TypeScript schemas), caching architecture, chosen tech stack, and a phased implementation plan. Start here when writing code.
-- **`Google Drive API Comment-Related Capabilities.md`** — reference for all 12 `comments.*` / `replies.*` Drive API v3 methods, the anchoring system, and OAuth scopes.
-- **`report-claude.md`** / **`report-chatgpt.md`** — market analysis and empirical API-behavior findings; `report-chatgpt.md` has the most detail on real-world anchor parsing.
-- **`llms-full.md`** — MCP protocol reference (transports, message types, lifecycle).
+This is **not** a TypeScript MCP server and **not** comments-only — earlier drafts said so; both are obsolete. An MCP wrapper is possible later but out of scope.
+
+## Where things live
+
+- **`docs/superpowers/specs/2026-07-20-csa-google-workspace-design.md`** — the authoritative design spec (scope, architecture, API surface, error model, phasing). Start here.
+- **`docs/superpowers/plans/`** — the phased, bite-sized TDD implementation plans (foundations, comments, …). Each phase is built from its plan.
+- **`src/csa_google_workspace/`** — the library (see layout below).
+- **`research/`** — canonical API-behavior references: `google-drive-comments-reference.md` (Drive comments), `docs-suggestions-reference.md` (Docs suggestions), `server-landscape.md` (prior art), `mcp-*` (MCP notes, if an MCP wrapper is ever added).
+- **`experiments/`** — runnable empirical probes, each with a dated `RESULTS.md`. **Probe beats docs:** when Google's documentation and a probe disagree, the probe wins, and the finding is folded back into `research/`.
+
+## Code layout (`src/csa_google_workspace/`)
+
+- `workspace.py` — `Workspace` entry point + `open()`/`open_by_url()` (MIME-sniff → typed subclass).
+- `auth.py` — OAuth installed-app flow, scope selection, re-consent detection.
+- `backend.py` — `Backend` protocol; `ApiBackend` (real Google APIs) + `FakeBackend` (in-memory, powers all unit tests).
+- `_services.py` — lazy Google API client registry. `_errors.py` — `HttpError`→typed translator + retry.
+- `base.py` — `Document` base + `CommentsMixin`. `documents/` — `Doc`/`Sheet`/`Slides`.
+- `comments.py` — `Author`/`Reply`/`Comment`/`CommentCollection` + in-place mutation.
+- `exceptions.py` — typed error hierarchy.
 
 ## Critical architectural facts
 
-These are the non-obvious decisions that shape any implementation and are spread across multiple documents:
+1. **Comments are a Google Drive API v3 concern**, uniform across Docs/Sheets/Slides — one API for all three (the "uniform axis"). Content is the "variant axis" (three separate APIs: Docs v1, Sheets v4, Slides v1). Sheets *notes* are a different, out-of-scope thing.
+2. **Probe-verified comment quirks the code depends on** (see `experiments/comment-lifecycle/`): `resolved` is **absent** on a never-resolved comment → treat missing as `False`; soft-delete strips **both `content` and `author`** (models are `Optional`); resolve/reopen is an **action-reply** (never a PATCH) and may be **content-less**; `author.email` is usually absent even when requested.
+3. **Sheets `anchor` is `workbook-range` — structured but NOT A1-decodable** (opaque range id). You cannot create a cell-anchored comment via the API, and mapping a comment→cell requires an **XLSX-export-and-parse** detour (Phase 4). Earlier "`R1C2`/parse-to-A1" framing was debunked folklore. See `research/google-drive-comments-reference.md` §7.
+4. **Docs suggestions are read-only** — the Docs API has **no accept/reject endpoint** (proven by full API enumeration) and exposes no suggestion author. Accept/reject is a future `PlaywrightBackend` concern. See `research/docs-suggestions-reference.md`.
+5. **`Backend` seam:** API-first, with UI-automation (`PlaywrightBackend`) reserved for the genuinely API-impossible ops (accept/reject suggestion, true cell-anchored comment). `ApiBackend` raises `UnsupportedOperation` for those today.
+6. **Writes are ON by default**, gated by `read_only` (which also narrows to `.readonly` OAuth scopes). **Caching is OFF by default** (the tool is used in live multi-reviewer sessions where a self-only-invalidated cache goes stale). No persistent storage of comment content.
+7. **Three entry points:** `Workspace.from_credentials(creds)` (BYOD), `Workspace(backend=…)` (DI / run-as-a-service), `Workspace.from_oauth(...)` (interactive login → delegates to `from_credentials`).
 
-1. **Comments are a Google Drive API v3 concern, not Sheets.** The Google Sheets API cannot create, read, or delete comments — all comment/reply CRUD goes through `/drive/v3/files/{fileId}/comments`. (Sheets *notes* are different and are explicitly out of scope.)
+## Commands
 
-2. **The `anchor` field is the core engineering risk.** A comment's spatial location (which cell/row/column/range) is stored in an undocumented, inconsistently-formatted `anchor` string (e.g. `R1C2`, structured `range=` forms, or opaque object references). Parsing it into A1 notation is fragile — merged cells, named ranges, and multiple tabs produce ambiguous anchors. Treat anchor normalization as a first-class module developed against a synthetic test sheet covering these edge cases, with fallbacks.
+```bash
+pip install -e ".[dev]"        # install (src/ layout, Python >=3.10)
+pytest -q                       # unit suite — no network, no credentials (uses FakeBackend)
+# Live integration suite (real Google; opt-in only):
+CSA_GW_INTEGRATION=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tests/integration/
+```
 
-3. **Resolution is done via action-replies, not a settable field.** `resolved` cannot be PATCHed directly on a comment; resolve/reopen is performed by creating a reply with an action. Deletes are soft (comment marked `deleted: true`).
+## Working in this repo
 
-4. **Scope is comments-only, by design.** Reading/writing cell data and document content are handled by *separate* MCP servers. This server is meant to run alongside them. Do not add spreadsheet-data or doc-content features.
-
-5. **Caching + spatial indexing is central, not optional.** Large sheets have thousands of comments that would overflow an AI context window. The design mandates an in-memory cache (per `spreadsheetId`) plus a spatial index (cell/row/col/range → commentIds), with automatic invalidation on any write. Cache is in-memory only — no persistent storage of comment content.
-
-## Intended tech stack (when implementing)
-
-Per the design doc, not yet present in the repo:
-
-- **TypeScript** with `@modelcontextprotocol/sdk` and the `googleapis` npm package
-- **Stdio transport** primary, SSE optional
-- **Jest** for tests (target 90%+ coverage, focused on cache invalidation and anchor/spatial parsing), **ESLint + Prettier**
-- Default to **read-only mode**; writes require explicit opt-in (`enable_write`)
-
-## Working in this repo today
-
-Since the repo is documentation only, work is normal Markdown editing under `research/` and `README.md`. There are no commands to build, lint, or test. Keep `README.md`'s manifest in sync when adding or restructuring research documents.
+- **Branch + PR for every change** (never commit to `main`); merge when CI is green.
+- **CI is GitHub CodeQL default-setup + a Python analyze job** (no workflow files in-repo). Two gotchas seen: CodeQL flags `"host" in url`-style substring checks (`py/incomplete-url-substring-sanitization`) even in test assertions; and an OAuth **scope grant ≠ API enablement** — a scoped token still 403s `SERVICE_DISABLED` until each API (Docs/Sheets/Slides) is enabled in the Cloud project.
+- **New phases follow the plan-then-execute rhythm:** write a spec/plan under `docs/superpowers/`, then implement TDD (unit tests via `FakeBackend`). Keep `README.md`'s manifest in sync.
+- OAuth secrets (`credentials.json`, `token*.json`) and probe transcripts are gitignored — never commit them.
