@@ -1,4 +1,3 @@
-import pytest
 from csa_google_workspace import exceptions as exc
 
 
@@ -13,7 +12,7 @@ def test_service_disabled_carries_service_and_url():
     e = exc.ServiceDisabledError("docs.googleapis.com", "https://console/enable")
     assert e.service == "docs.googleapis.com"
     assert "console" in e.activation_url
-    assert "docs.googleapis.com" in str(e)
+    assert e.service in str(e)
 
 
 def test_api_error_carries_status_reason():
