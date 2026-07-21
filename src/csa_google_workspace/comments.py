@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from .exceptions import ReadOnlyError
+
 
 def parse_time(s: str | None) -> datetime | None:
     if not s:
@@ -37,6 +39,11 @@ class Reply:
     deleted: bool
     created_time: datetime | None
     modified_time: datetime | None
+    # set by Comment/CommentCollection; enable mutation (Task 5)
+    _backend: object = field(default=None, repr=False, compare=False)
+    _file_id: str | None = field(default=None, repr=False, compare=False)
+    _comment_id: str | None = field(default=None, repr=False, compare=False)
+    _read_only: bool = field(default=False, repr=False, compare=False)
 
     @classmethod
     def from_api(cls, d: dict) -> "Reply":
@@ -45,6 +52,18 @@ class Reply:
                    action=d.get("action"), deleted=bool(d.get("deleted", False)),
                    created_time=parse_time(d.get("createdTime")),
                    modified_time=parse_time(d.get("modifiedTime")))
+
+    def edit(self, text: str) -> None:
+        if self._read_only:
+            raise ReadOnlyError("workspace is read_only; cannot edit a reply")
+        d = self._backend.update_reply(self._file_id, self._comment_id, self.id, text)
+        self.content = d.get("content"); self.html_content = d.get("htmlContent")
+
+    def delete(self) -> None:
+        if self._read_only:
+            raise ReadOnlyError("workspace is read_only; cannot delete a reply")
+        self._backend.delete_reply(self._file_id, self._comment_id, self.id)
+        self.deleted = True; self.content = None; self.html_content = None; self.author = None
 
 
 @dataclass
@@ -80,6 +99,49 @@ class Comment:
             replies=[Reply.from_api(r) for r in d.get("replies", [])],
         )
 
+    def _guard(self):
+        if self._read_only:
+            raise ReadOnlyError("workspace is read_only; cannot mutate comments")
+
+    def reply(self, text: str) -> "Reply":
+        self._guard()
+        r = Reply.from_api(self._backend.create_reply(self._file_id, self.id, content=text))
+        self._attach_reply(r)
+        self.replies.append(r)
+        return r
+
+    def resolve(self, text: str = "") -> "Reply":
+        self._guard()
+        r = Reply.from_api(self._backend.create_reply(
+            self._file_id, self.id, content=text or None, action="resolve"))
+        self._attach_reply(r)
+        self.replies.append(r)
+        self.resolved = True
+        return r
+
+    def reopen(self, text: str = "") -> "Reply":
+        self._guard()
+        r = Reply.from_api(self._backend.create_reply(
+            self._file_id, self.id, content=text or None, action="reopen"))
+        self._attach_reply(r)
+        self.replies.append(r)
+        self.resolved = False
+        return r
+
+    def edit(self, text: str) -> None:
+        self._guard()
+        d = self._backend.update_comment(self._file_id, self.id, text)
+        self.content = d.get("content"); self.html_content = d.get("htmlContent")
+
+    def delete(self) -> None:
+        self._guard()
+        self._backend.delete_comment(self._file_id, self.id)
+        self.deleted = True; self.content = None; self.html_content = None; self.author = None
+
+    def _attach_reply(self, r: "Reply") -> None:
+        r._backend = self._backend; r._file_id = self._file_id
+        r._comment_id = self.id; r._read_only = self._read_only
+
 
 class CommentCollection:
     """Lazy, filterable view of a file's comments."""
@@ -94,6 +156,9 @@ class CommentCollection:
         c._backend = self._backend
         c._file_id = self._file_id
         c._read_only = self._read_only
+        for r in c.replies:
+            r._backend = self._backend; r._file_id = self._file_id
+            r._comment_id = c.id; r._read_only = self._read_only
         return c
 
     def all(self, include_deleted: bool = False) -> list["Comment"]:
