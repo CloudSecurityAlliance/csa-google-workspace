@@ -129,7 +129,6 @@ class FakeBackend:
         raise exc.NotFoundError(f"reply '{reply_id}' not found")
 
     def _fixture(self, store, key, kind):
-        # `copy` is already imported at the top of backend.py (from the Phase-2 deep-copy fix).
         if key not in store:
             raise exc.NotFoundError(f"{kind} '{key}' not found")
         return copy.deepcopy(store[key])

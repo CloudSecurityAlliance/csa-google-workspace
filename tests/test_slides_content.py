@@ -29,3 +29,16 @@ def test_slides_list_and_per_slide_text():
 def test_deck_as_text_joins_all_slides():
     t = slides().as_text()
     assert "Title slide" in t and "Second slide" in t
+
+
+def test_slide_notes():
+    # Create a presentation with a slide containing speaker notes
+    presentation_with_notes = {"slides": [
+        {"pageElements": [_shape("Slide with notes\n")],
+         "slideProperties": {"notesPage": {"pageElements": [
+             {"shape": {"text": {"textElements": [{"textRun": {"content": "speaker note here"}}]}}}
+         ]}}}
+    ]}
+    workspace = Workspace(FakeBackend(META, presentations={"p": presentation_with_notes}))
+    slide_deck = workspace.open("p")
+    assert "speaker note here" in slide_deck.slides[0].notes
