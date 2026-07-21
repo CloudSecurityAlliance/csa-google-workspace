@@ -61,6 +61,10 @@ class Comment:
     created_time: datetime | None
     modified_time: datetime | None
     replies: list[Reply] = field(default_factory=list)
+    # set by CommentCollection; enable mutation (Task 5)
+    _backend: object = field(default=None, repr=False, compare=False)
+    _file_id: str | None = field(default=None, repr=False, compare=False)
+    _read_only: bool = field(default=False, repr=False, compare=False)
 
     @classmethod
     def from_api(cls, d: dict) -> "Comment":
@@ -75,3 +79,45 @@ class Comment:
             modified_time=parse_time(d.get("modifiedTime")),
             replies=[Reply.from_api(r) for r in d.get("replies", [])],
         )
+
+
+class CommentCollection:
+    """Lazy, filterable view of a file's comments."""
+
+    def __init__(self, backend, file_id: str, read_only: bool):
+        self._backend = backend
+        self._file_id = file_id
+        self._read_only = read_only
+
+    def _wrap(self, d: dict) -> "Comment":
+        c = Comment.from_api(d)
+        c._backend = self._backend
+        c._file_id = self._file_id
+        c._read_only = self._read_only
+        return c
+
+    def all(self, include_deleted: bool = False) -> list["Comment"]:
+        return [self._wrap(d) for d in self._backend.list_comments(
+            self._file_id, include_deleted=include_deleted)]
+
+    def get(self, comment_id: str) -> "Comment":
+        return self._wrap(self._backend.get_comment(self._file_id, comment_id))
+
+    def filter(self, *, resolved: bool | None = None, author: str | None = None,
+               since: "datetime | None" = None, include_deleted: bool = False) -> list["Comment"]:
+        smt = since.isoformat().replace("+00:00", "Z") if since else None
+        raw = self._backend.list_comments(self._file_id, include_deleted=include_deleted,
+                                          start_modified_time=smt)
+        out = []
+        for d in raw:
+            c = self._wrap(d)
+            if resolved is not None and c.resolved != resolved:
+                continue
+            if author is not None and not (c.author and (c.author.email == author
+                                                          or c.author.display_name == author)):
+                continue
+            out.append(c)
+        return out
+
+    def __iter__(self):
+        return iter(self.all())
