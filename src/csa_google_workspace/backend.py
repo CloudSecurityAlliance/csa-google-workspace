@@ -1,6 +1,7 @@
 """Backend seam. ApiBackend uses the real Google APIs; FakeBackend is in-memory for tests.
 Operations Google exposes only through the UI raise UnsupportedOperation on ApiBackend; a
 future PlaywrightBackend could implement them without changing the public API."""
+import copy
 from typing import Protocol
 
 from . import _errors
@@ -57,10 +58,10 @@ class FakeBackend:
         out = [c for (f, _), c in self._comments.items() if f == file_id]
         if not include_deleted:
             out = [c for c in out if not c.get("deleted")]
-        return [dict(c) for c in out]
+        return [copy.deepcopy(c) for c in out]
 
     def get_comment(self, file_id, comment_id):
-        return dict(self._require(file_id, comment_id))
+        return copy.deepcopy(self._require(file_id, comment_id))
 
     def create_comment(self, file_id, content):
         self.get_file_metadata(file_id)  # validates the file exists (raises NotFoundError)
@@ -70,7 +71,7 @@ class FakeBackend:
              "createdTime": "2026-01-01T00:00:00Z", "modifiedTime": "2026-01-01T00:00:00Z",
              "replies": []}
         self._comments[(file_id, cid)] = c
-        return dict(c)
+        return copy.deepcopy(c)
 
     def create_reply(self, file_id, comment_id, content=None, action=None):
         c = self._require(file_id, comment_id)
@@ -82,19 +83,19 @@ class FakeBackend:
             r["action"] = action
             c["resolved"] = (action == "resolve")   # flip parent (MEASURED)
         c["replies"].append(r)
-        return dict(r)
+        return copy.deepcopy(r)
 
     def update_comment(self, file_id, comment_id, content):
         c = self._require(file_id, comment_id)
         c["content"] = content; c["htmlContent"] = content
-        return dict(c)
+        return copy.deepcopy(c)
 
     def update_reply(self, file_id, comment_id, reply_id, content):
         c = self._require(file_id, comment_id)
         for r in c["replies"]:
             if r["id"] == reply_id:
                 r["content"] = content; r["htmlContent"] = content
-                return dict(r)
+                return copy.deepcopy(r)
         raise exc.NotFoundError(f"reply '{reply_id}' not found")
 
     def delete_comment(self, file_id, comment_id):

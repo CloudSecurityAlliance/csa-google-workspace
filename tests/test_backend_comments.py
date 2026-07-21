@@ -37,3 +37,15 @@ def test_soft_delete_strips_and_hides():
 def test_missing_comment_raises_not_found():
     with pytest.raises(exc.NotFoundError):
         be().get_comment("f", "nope")
+
+
+def test_returned_dicts_are_isolated_from_store():
+    b = be()
+    c = b.create_comment("f", "q")
+    b.create_reply("f", c["id"], content="a reply")
+    got = b.get_comment("f", c["id"])
+    got["replies"].append({"id": "injected"})      # mutate the returned copy
+    got["content"] = "TAMPERED"
+    fresh = b.get_comment("f", c["id"])
+    assert len(fresh["replies"]) == 1               # store unaffected
+    assert fresh["content"] == "q"
