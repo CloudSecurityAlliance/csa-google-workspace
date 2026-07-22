@@ -44,3 +44,14 @@ def test_location_none_when_no_export_match():
     b._exports[("s", XLSX)] = _xlsx("B11", "Someone Else", "different", "2026-01-01T00:00:00.00")
     sheet = Workspace(b).open("s")
     assert sheet.comments.get(c["id"]).location is None
+
+
+def test_cell_map_retries_after_transient_failure():
+    b = FakeBackend(META)
+    c = b.create_comment("s", "check West")
+    sheet = Workspace(b).open("s")
+    # export fixture missing -> export_file raises NotFoundError -> degrade to None, NOT cached
+    assert sheet.comments.get(c["id"]).location is None
+    b._exports[("s", XLSX)] = _xlsx("B11", "Test User", "check West", "2026-01-01T00:00:00.00")
+    # a later access must retry (not serve a memoized empty map) and now resolve the cell
+    assert sheet.comments.get(c["id"]).location.cell == "B11"

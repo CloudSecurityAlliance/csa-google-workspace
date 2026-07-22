@@ -35,3 +35,10 @@ def test_quote_tab_escapes_embedded_apostrophe():
     assert s._quote_tab("O'Brien") == "'O''Brien'"
     assert s._quote_tab("Q1 Budget") == "'Q1 Budget'"
     assert s._quote_tab("Sheet1") == "Sheet1"
+
+
+def test_quote_tab_quotes_cell_like_names():
+    s = _sheet([("Sheet1", 0)])
+    assert s._quote_tab("Q1") == "'Q1'"
+    assert s._quote_tab("AB12") == "'AB12'"
+    assert s._quote_tab("Sheet1") == "Sheet1"
