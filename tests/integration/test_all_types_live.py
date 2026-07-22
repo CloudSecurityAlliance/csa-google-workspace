@@ -121,3 +121,20 @@ def test_sheet_cell_mapping_live():
         loc = s.comments.get(c.id).location
         assert loc is not None and loc.cell == "A1", f"expected A1, got {loc}"
         c.delete()
+
+
+def test_content_write_live():
+    from csa_google_workspace import Doc, Sheet
+    ws = _ws()
+    with _throwaway(ws, "application/vnd.google-apps.document", "E2E-DocWrite-THROWAWAY") as fid:
+        d = ws.open(fid)
+        d.append_text("written by the library")
+        assert "written by the library" in ws.open(fid).as_text()
+        d.replace_text("written by the library", "edited by the library")
+        assert "edited by the library" in ws.open(fid).as_text()
+    with _throwaway(ws, "application/vnd.google-apps.spreadsheet", "E2E-SheetWrite-THROWAWAY") as sid:
+        s = ws.open(sid)
+        s.update("Sheet1!A1", [["hello", "world"]])
+        assert s.values("Sheet1!A1:B1") == [["hello", "world"]]
+        s.clear("Sheet1!A1:B1")
+        assert s.values("Sheet1!A1:B1") == []
