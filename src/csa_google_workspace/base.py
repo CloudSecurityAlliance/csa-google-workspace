@@ -45,7 +45,6 @@ class Document(CommentsMixin):
 
     def _require_writable(self) -> None:
         if self.read_only:
-            from . import exceptions as exc
             raise exc.ReadOnlyError("workspace is read_only; content writes are disabled")
 
 

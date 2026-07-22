@@ -71,9 +71,9 @@ class Sheet(Document):
     def reload(self) -> None:
         self._cell_map_cache = None
 
-    def update(self, a1_range: str, values: list) -> None:
+    def update(self, a1_range: str, values: list, value_input_option: str = "RAW") -> None:
         self._require_writable()
-        self._backend.sheets_values_update(self.id, a1_range, values)
+        self._backend.sheets_values_update(self.id, a1_range, values, value_input_option)
 
     def clear(self, a1_range: str) -> None:
         self._require_writable()

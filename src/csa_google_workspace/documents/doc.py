@@ -3,7 +3,7 @@ from .. import _content
 
 
 class Doc(Document):
-    """Google Docs. Content read; write + suggestions arrive in later phases."""
+    """Google Docs: read (as_text/paragraphs) + write (replace/insert/append/delete). Suggestions read is a later phase."""
 
     def as_text(self) -> str:
         return _content.doc_text(self._backend.get_document(self.id))

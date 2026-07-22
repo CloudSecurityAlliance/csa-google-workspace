@@ -28,7 +28,8 @@ class Backend(Protocol):
     def get_values(self, file_id: str, a1_range: str) -> list: ...
     def get_presentation(self, file_id: str) -> dict: ...
     def docs_batch_update(self, file_id: str, requests: list) -> dict: ...
-    def sheets_values_update(self, file_id: str, a1_range: str, values: list) -> dict: ...
+    def sheets_values_update(self, file_id: str, a1_range: str, values: list,
+                             value_input_option: str = "RAW") -> dict: ...
     def sheets_values_clear(self, file_id: str, a1_range: str) -> dict: ...
     def sheets_batch_update(self, file_id: str, requests: list) -> dict: ...
     def slides_batch_update(self, file_id: str, requests: list) -> dict: ...
@@ -158,8 +159,8 @@ class FakeBackend:
         self._writes.append((file_id, "docs", requests))
         return {}
 
-    def sheets_values_update(self, file_id, a1_range, values):
-        self._writes.append((file_id, "sheets_values_update", a1_range, values))
+    def sheets_values_update(self, file_id, a1_range, values, value_input_option="RAW"):
+        self._writes.append((file_id, "sheets_values_update", a1_range, values, value_input_option))
         self._values[(file_id, a1_range)] = values
         return {}
 
@@ -282,9 +283,9 @@ class ApiBackend:
         return _errors.call(self._services.docs.documents().batchUpdate(
             documentId=file_id, body={"requests": requests}).execute)
 
-    def sheets_values_update(self, file_id, a1_range, values):
+    def sheets_values_update(self, file_id, a1_range, values, value_input_option="RAW"):
         return _errors.call(self._services.sheets.spreadsheets().values().update(
-            spreadsheetId=file_id, range=a1_range, valueInputOption="RAW",
+            spreadsheetId=file_id, range=a1_range, valueInputOption=value_input_option,
             body={"values": values}).execute)
 
     def sheets_values_clear(self, file_id, a1_range):

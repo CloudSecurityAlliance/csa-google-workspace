@@ -18,7 +18,7 @@ def test_docs_batch_update_records():
 def test_sheets_values_update_records_and_updates_fixture():
     b = be()
     b.sheets_values_update("f", "Sheet1!A1", [["x", "y"]])
-    assert ("f", "sheets_values_update", "Sheet1!A1", [["x", "y"]]) in b._writes
+    assert ("f", "sheets_values_update", "Sheet1!A1", [["x", "y"]], "RAW") in b._writes
     assert b.get_values("f", "Sheet1!A1") == [["x", "y"]]      # readback reflects the write
 
 

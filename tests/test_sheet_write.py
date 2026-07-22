@@ -14,8 +14,14 @@ def sheet(read_only=False):
 def test_update_writes_values_and_reads_back():
     s, b = sheet()
     s.update("Sheet1!A1", [["a", "b"]])
-    assert ("s", "sheets_values_update", "Sheet1!A1", [["a", "b"]]) in b._writes
+    assert ("s", "sheets_values_update", "Sheet1!A1", [["a", "b"]], "RAW") in b._writes
     assert s.values("Sheet1!A1") == [["a", "b"]]
+
+
+def test_update_passes_value_input_option():
+    s, b = sheet()
+    s.update("Sheet1!A1", [["=SUM(B:B)"]], value_input_option="USER_ENTERED")
+    assert ("s", "sheets_values_update", "Sheet1!A1", [["=SUM(B:B)"]], "USER_ENTERED") in b._writes
 
 
 def test_clear_records():

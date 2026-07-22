@@ -17,7 +17,7 @@ class Slide:
 
 
 class Slides(Document):
-    """Google Slides. Content read; write arrives in a later phase."""
+    """Google Slides: read (slides/as_text) + deck-wide text write (replace_text)."""
 
     @property
     def slides(self) -> list[Slide]:
