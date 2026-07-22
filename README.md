@@ -61,4 +61,4 @@ sheet.comments_by_cell("B11")                       # comments mapped back to a 
 
 ## License
 
-Dual-licensed under [MIT](./LICENSE-MIT) and [Apache 2.0](./LICENSE-APACHE).
+Licensed under the [Apache License, Version 2.0](./LICENSE).
