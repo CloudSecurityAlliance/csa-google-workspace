@@ -12,6 +12,12 @@ MIME_TO_TYPE = {
 }
 
 
+def occurrences_changed(resp: dict) -> int:
+    """`occurrencesChanged` from a replaceAllText batchUpdate reply (0 if absent) —
+    shared by Doc.replace_text and Slides.replace_text."""
+    return (resp.get("replies") or [{}])[0].get("replaceAllText", {}).get("occurrencesChanged", 0)
+
+
 class CommentsMixin:
     """Provides `comments` and `create_comment()` uniformly across document types.
     A subclass may define `_locate_comment(raw_dict)` to enrich `Comment.location` via the locate hook."""

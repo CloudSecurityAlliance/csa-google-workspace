@@ -1,5 +1,5 @@
 from .. import _content
-from ..base import Document
+from ..base import Document, occurrences_changed
 
 
 class Slide:
@@ -41,7 +41,7 @@ class Slides(Document):
         self._require_writable()
         resp = self._backend.slides_batch_update(self.id, [{"replaceAllText": {
             "containsText": {"text": find, "matchCase": match_case}, "replaceText": replace}}])
-        return (resp.get("replies") or [{}])[0].get("replaceAllText", {}).get("occurrencesChanged", 0)
+        return occurrences_changed(resp)
 
     def insert_text(self, object_id: str, text: str, index: int = 0) -> None:
         """Insert `text` into the shape `object_id` at character `index`

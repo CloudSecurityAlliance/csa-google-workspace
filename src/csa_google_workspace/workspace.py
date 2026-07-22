@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from typing import TYPE_CHECKING
 
 from .backend import ApiBackend, Backend
@@ -31,6 +32,9 @@ class Workspace:
         return cls(self._backend, meta, read_only=self.read_only)
 
     def open_by_url(self, url: str) -> Document:
+        """Deprecated: `open()` already accepts a URL or a bare file id."""
+        warnings.warn("open_by_url() is deprecated; open() accepts URLs and file ids too.",
+                      DeprecationWarning, stacklevel=2)
         return self.open(url)
 
     @classmethod
