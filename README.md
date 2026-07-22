@@ -60,6 +60,29 @@ sheet.comments_by_cell("B11")                       # comments mapped back to a 
 
 **Entry points:** `Workspace.from_credentials(creds)` (bring-your-own credentials — user OAuth or a service account), `Workspace(backend=…)` (dependency injection / run-as-a-service), `Workspace.from_oauth(...)` (interactive login). **Writes are on by default**; pass `read_only=True` to lock them (and narrow to read-only OAuth scopes). Public types — `Comment`, `Author`, `Reply`, `Location`, `Suggestion`, `Slide` — are importable from the package root.
 
+## Capability boundaries
+
+The library is **document-scoped** and honest about what the Google APIs can't do:
+
+- **Suggestions are read/preview only.** `Doc.suggestions` reads suggesting-mode edits and `as_text(suggestions="accepted"|"rejected")` previews the outcome, but **accepting/rejecting is impossible via the API** (`UnsupportedOperation`) — Google exposes no endpoint. Reserved for a future `PlaywrightBackend`.
+- **No document discovery.** You hand the library a file id/URL (`Workspace.open(id)`); there is no `files.list`/search. A "sweep my documents" job enumerates files itself and opens each:
+  ```python
+  files = drive.files().list(q="mimeType='application/vnd.google-apps.document'",
+                             fields="files(id)").execute()["files"]
+  for f in files:
+      doc = ws.open(f["id"])
+      ...
+  ```
+- **Sheets cell-anchored comments can't be created via the API** — `sheet.create_comment(text, cell=…)` posts a file-level comment with a `#gid=…&range=…` deep-link instead.
+
+## Using it on a user's behalf (production)
+
+This library is a building block for MCP servers / agents / automations acting **on a user's behalf** with a full-Drive token. Before deploying, read [`SECURITY.md`](./SECURITY.md) — prompt injection through document/comment content is the primary risk. In short:
+
+- **Credential seam:** `from_oauth` + local `token.json` is **PoC/CLI scaffolding** (`run_local_server()` can't run on a server). In production the host runs its own OAuth, stores per-user tokens in a secret store, and passes ready credentials via **`Workspace.from_credentials(creds)`** — the production entry point.
+- **Concurrency:** one `Workspace` per request/user; never share a `Workspace` (or its backend) across threads — `googleapiclient` clients aren't thread-safe. The stack is synchronous; wrap calls in `asyncio.to_thread(...)` from async code.
+- **Isolation & least authority:** a `Workspace` binds one user's credentials — never reuse it across users. Default to `read_only=True` and escalate to a write-capable `Workspace` deliberately, per operation.
+
 ## Documents
 
 | Document | What it is |
