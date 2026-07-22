@@ -61,3 +61,11 @@ def test_create_comment_invalidates_cell_map_cache():
     s._cell_map_cache = {"stale": "value"}
     s.create_comment("just a note")
     assert s._cell_map_cache is None
+
+
+def test_create_comment_accepts_content_keyword_matching_base():
+    # Audit #10 (LSP): the override must keep the base's `content` parameter name
+    # so generic `document.create_comment(content=...)` works for any concrete type.
+    s = _sheet([("Sheet1", 0)])
+    c = s.create_comment(content="hello")
+    assert c.content == "hello"
