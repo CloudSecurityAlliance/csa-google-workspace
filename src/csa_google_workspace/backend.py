@@ -27,6 +27,11 @@ class Backend(Protocol):
     def get_spreadsheet(self, file_id: str) -> dict: ...
     def get_values(self, file_id: str, a1_range: str) -> list: ...
     def get_presentation(self, file_id: str) -> dict: ...
+    def docs_batch_update(self, file_id: str, requests: list) -> dict: ...
+    def sheets_values_update(self, file_id: str, a1_range: str, values: list) -> dict: ...
+    def sheets_values_clear(self, file_id: str, a1_range: str) -> dict: ...
+    def sheets_batch_update(self, file_id: str, requests: list) -> dict: ...
+    def slides_batch_update(self, file_id: str, requests: list) -> dict: ...
 
 
 class FakeBackend:
@@ -42,6 +47,7 @@ class FakeBackend:
         self._values = values or {}
         self._presentations = presentations or {}
         self._exports = exports or {}
+        self._writes = []
 
     def get_file_metadata(self, file_id: str) -> dict:
         try:
@@ -148,6 +154,28 @@ class FakeBackend:
     def get_presentation(self, file_id):
         return self._fixture(self._presentations, file_id, "presentation")
 
+    def docs_batch_update(self, file_id, requests):
+        self._writes.append((file_id, "docs", requests))
+        return {}
+
+    def sheets_values_update(self, file_id, a1_range, values):
+        self._writes.append((file_id, "sheets_values_update", a1_range, values))
+        self._values[(file_id, a1_range)] = values
+        return {}
+
+    def sheets_values_clear(self, file_id, a1_range):
+        self._writes.append((file_id, "sheets_values_clear", a1_range))
+        self._values.pop((file_id, a1_range), None)
+        return {}
+
+    def sheets_batch_update(self, file_id, requests):
+        self._writes.append((file_id, "sheets", requests))
+        return {}
+
+    def slides_batch_update(self, file_id, requests):
+        self._writes.append((file_id, "slides", requests))
+        return {}
+
 
 class ApiBackend:
     """Real backend over google-api-python-client. `services` is a ServiceRegistry (Task 4)."""
@@ -249,3 +277,24 @@ class ApiBackend:
 
     def get_presentation(self, file_id):
         return _errors.call(self._services.slides.presentations().get(presentationId=file_id).execute)
+
+    def docs_batch_update(self, file_id, requests):
+        return _errors.call(self._services.docs.documents().batchUpdate(
+            documentId=file_id, body={"requests": requests}).execute)
+
+    def sheets_values_update(self, file_id, a1_range, values):
+        return _errors.call(self._services.sheets.spreadsheets().values().update(
+            spreadsheetId=file_id, range=a1_range, valueInputOption="RAW",
+            body={"values": values}).execute)
+
+    def sheets_values_clear(self, file_id, a1_range):
+        return _errors.call(self._services.sheets.spreadsheets().values().clear(
+            spreadsheetId=file_id, range=a1_range, body={}).execute)
+
+    def sheets_batch_update(self, file_id, requests):
+        return _errors.call(self._services.sheets.spreadsheets().batchUpdate(
+            spreadsheetId=file_id, body={"requests": requests}).execute)
+
+    def slides_batch_update(self, file_id, requests):
+        return _errors.call(self._services.slides.presentations().batchUpdate(
+            presentationId=file_id, body={"requests": requests}).execute)
