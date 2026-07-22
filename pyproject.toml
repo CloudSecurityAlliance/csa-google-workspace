@@ -1,12 +1,41 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "csa-google-workspace"
-version = "0.0.1"
+dynamic = ["version"]
 description = "Read/write content and manage comments on Google Docs, Sheets, and Slides"
+readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+authors = [{ name = "Cloud Security Alliance" }]
+maintainers = [{ name = "Kurt Seifried", email = "kseifried@cloudsecurityalliance.org" }]
+keywords = [
+    "google",
+    "google-workspace",
+    "google-docs",
+    "google-sheets",
+    "google-slides",
+    "google-drive",
+    "comments",
+    "suggestions",
+    "mcp",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = [
     "google-api-python-client>=2.0",
     "google-auth>=2.0",
@@ -16,6 +45,17 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+
+[project.urls]
+Homepage = "https://github.com/CloudSecurityAlliance/csa-google-workspace"
+Repository = "https://github.com/CloudSecurityAlliance/csa-google-workspace"
+Issues = "https://github.com/CloudSecurityAlliance/csa-google-workspace/issues"
+Changelog = "https://github.com/CloudSecurityAlliance/csa-google-workspace/blob/main/CHANGELOG.md"
+
+# Single source of truth for the version: csa_google_workspace.__version__
+# (setuptools reads it by static AST parse; no need to import the package).
+[tool.setuptools.dynamic]
+version = { attr = "csa_google_workspace.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
