@@ -13,9 +13,17 @@ def slides(read_only=False):
 
 def test_replace_text_builds_deckwide_replaceAllText():
     p, b = slides()
-    p.replace_text("old", "new")
+    result = p.replace_text("old", "new")
     assert b._writes == [("p", "slides", [{"replaceAllText": {
         "containsText": {"text": "old", "matchCase": True}, "replaceText": "new"}}])]
+    assert isinstance(result, int) and result == 0  # FakeBackend returns {} -> defaults to 0
+
+
+def test_replace_text_match_case_false():
+    p, b = slides()
+    p.replace_text("old", "new", match_case=False)
+    assert b._writes == [("p", "slides", [{"replaceAllText": {
+        "containsText": {"text": "old", "matchCase": False}, "replaceText": "new"}}])]
 
 
 def test_batch_update_records():

@@ -13,9 +13,17 @@ def doc(read_only=False, document=None):
 
 def test_replace_text_builds_replaceAllText():
     d, b = doc()
-    d.replace_text("old", "new")
+    result = d.replace_text("old", "new")
     assert b._writes == [("d", "docs", [{"replaceAllText": {
         "containsText": {"text": "old", "matchCase": True}, "replaceText": "new"}}])]
+    assert isinstance(result, int) and result == 0  # FakeBackend returns {} -> defaults to 0
+
+
+def test_replace_text_match_case_false():
+    d, b = doc()
+    d.replace_text("old", "new", match_case=False)
+    assert b._writes == [("d", "docs", [{"replaceAllText": {
+        "containsText": {"text": "old", "matchCase": False}, "replaceText": "new"}}])]
 
 
 def test_insert_text_builds_insertText_at_index():

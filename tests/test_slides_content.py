@@ -1,4 +1,4 @@
-from csa_google_workspace import Workspace
+from csa_google_workspace import Workspace, _content
 from csa_google_workspace.backend import FakeBackend
 
 PRES = "application/vnd.google-apps.presentation"
@@ -42,3 +42,17 @@ def test_slide_notes():
     workspace = Workspace(FakeBackend(META, presentations={"p": presentation_with_notes}))
     slide_deck = workspace.open("p")
     assert "speaker note here" in slide_deck.slides[0].notes
+
+
+def test_slide_text_recurses_into_tables_and_element_groups():
+    slide = {"pageElements": [
+        _shape("shape text\n"),
+        {"table": {"tableRows": [
+            {"tableCells": [{"text": {"textElements": [{"textRun": {"content": "cell text"}}]}}]}
+        ]}},
+        {"elementGroup": {"children": [_shape("grouped text")]}},
+    ]}
+    text = _content.slide_text(slide)
+    assert "shape text" in text
+    assert "cell text" in text
+    assert "grouped text" in text

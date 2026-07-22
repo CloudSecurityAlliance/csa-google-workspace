@@ -35,6 +35,20 @@ def _service_disabled_details(err: HttpError):
     return None
 
 
+def _retry_after(err: HttpError):
+    """Parse the Retry-After header (seconds) from an httplib2 Response, if present."""
+    try:
+        value = err.resp.get("retry-after")
+    except AttributeError:
+        return None
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def translate_http_error(err: HttpError) -> exc.CsaWorkspaceError:
     status = int(getattr(err.resp, "status", 0) or 0)
     reason, message = _reason_and_message(err)
@@ -50,7 +64,7 @@ def translate_http_error(err: HttpError) -> exc.CsaWorkspaceError:
             return exc.ServiceDisabledError(service="(see message)", activation_url=message)
         return exc.AccessError(message or "insufficient permission")
     if status == 429:
-        return exc.RateLimitError()
+        return exc.RateLimitError(retry_after=_retry_after(err))
     return exc.ApiError(status=status, reason=reason, message=message or str(err))
 
 
@@ -67,6 +81,7 @@ def call(fn, *args, idempotent: bool = True, _sleep=time.sleep, **kwargs):
             status = int(getattr(err.resp, "status", 0) or 0)
             retryable = status == 429 or (idempotent and status in _RETRYABLE)
             if retryable and attempt < _MAX_ATTEMPTS:
-                _sleep(0.5 * (2 ** (attempt - 1)))
+                retry_after = _retry_after(err) if status == 429 else None
+                _sleep(retry_after if retry_after is not None else 0.5 * (2 ** (attempt - 1)))
                 continue
             raise translate_http_error(err) from err

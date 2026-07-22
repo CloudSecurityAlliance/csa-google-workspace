@@ -27,10 +27,11 @@ class Slides(Document):
     def as_text(self) -> str:
         return "\n".join(s.as_text() for s in self.slides)
 
-    def replace_text(self, find: str, replace: str) -> None:
+    def replace_text(self, find: str, replace: str, match_case: bool = True) -> int:
         self._require_writable()
-        self._backend.slides_batch_update(self.id, [{"replaceAllText": {
-            "containsText": {"text": find, "matchCase": True}, "replaceText": replace}}])
+        resp = self._backend.slides_batch_update(self.id, [{"replaceAllText": {
+            "containsText": {"text": find, "matchCase": match_case}, "replaceText": replace}}])
+        return resp.get("replies", [{}])[0].get("replaceAllText", {}).get("occurrencesChanged", 0)
 
     def batch_update(self, requests: list) -> dict:
         self._require_writable()

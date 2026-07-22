@@ -8,11 +8,27 @@ class FakeResp:
         self.reason = "x"
 
 
+class FakeRespWithHeaders(dict):
+    """Mimics httplib2.Response: dict-like (case-insensitive in practice, but plain dict
+    suffices here) plus a `.status` attribute."""
+    def __init__(self, status, headers=None):
+        super().__init__(headers or {})
+        self.status = status
+        self.reason = "x"
+
+
 def _http_error(status, reason, message):
     from googleapiclient.errors import HttpError
     import json
     content = json.dumps({"error": {"errors": [{"reason": reason}], "message": message}}).encode()
     return HttpError(FakeResp(status), content)
+
+
+def _http_error_with_headers(status, reason, message, headers=None):
+    from googleapiclient.errors import HttpError
+    import json
+    content = json.dumps({"error": {"errors": [{"reason": reason}], "message": message}}).encode()
+    return HttpError(FakeRespWithHeaders(status, headers), content)
 
 
 @pytest.mark.parametrize("status,reason,expected", [
@@ -101,6 +117,33 @@ def test_call_idempotent_still_retries_5xx():
         return {"ok": True}
     assert _errors.call(flaky_503, _sleep=lambda s: None) == {"ok": True}
     assert calls["n"] == 3
+
+
+def test_translate_429_with_retry_after_header():
+    err = _http_error_with_headers(429, "rateLimitExceeded", "slow down",
+                                    headers={"status": "429", "retry-after": "30"})
+    e = _errors.translate_http_error(err)
+    assert isinstance(e, exc.RateLimitError)
+    assert e.retry_after == 30
+
+
+def test_translate_429_without_retry_after_header():
+    e = _errors.translate_http_error(_http_error(429, "rateLimitExceeded", "slow down"))
+    assert isinstance(e, exc.RateLimitError)
+    assert e.retry_after is None
+
+
+def test_call_sleeps_retry_after_seconds_on_429():
+    calls = {"n": 0}
+    sleeps = []
+    def flaky_429():
+        calls["n"] += 1
+        if calls["n"] < 2:
+            raise _http_error_with_headers(429, "rateLimitExceeded", "slow down",
+                                            headers={"status": "429", "retry-after": "7"})
+        return {"ok": True}
+    assert _errors.call(flaky_429, _sleep=lambda s: sleeps.append(s)) == {"ok": True}
+    assert sleeps == [7]
 
 
 def test_call_non_idempotent_still_retries_429():

@@ -25,10 +25,11 @@ class Doc(Document):
     def paragraphs(self) -> list[str]:
         return _content.doc_paragraphs(self._backend.get_document(self.id))
 
-    def replace_text(self, find: str, replace: str) -> None:
+    def replace_text(self, find: str, replace: str, match_case: bool = True) -> int:
         self._require_writable()
-        self._backend.docs_batch_update(self.id, [{"replaceAllText": {
-            "containsText": {"text": find, "matchCase": True}, "replaceText": replace}}])
+        resp = self._backend.docs_batch_update(self.id, [{"replaceAllText": {
+            "containsText": {"text": find, "matchCase": match_case}, "replaceText": replace}}])
+        return resp.get("replies", [{}])[0].get("replaceAllText", {}).get("occurrencesChanged", 0)
 
     def insert_text(self, text: str, at: int) -> None:
         self._require_writable()

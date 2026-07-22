@@ -49,7 +49,7 @@ def parse_xlsx_comments(xlsx_bytes: bytes) -> list[dict]:
                 text = ""
                 for child in el:
                     if _local(child.tag) == "text":
-                        text = child.text or ""
+                        text = "".join(child.itertext())
                 roots.append({
                     "ref": el.get("ref"),
                     "author": persons.get(el.get("personId")),
