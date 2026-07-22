@@ -12,6 +12,7 @@ the repo's "speak from authority" habit: if a doc and a probe disagree, the prob
 | [`anchor-probe/`](./anchor-probe/) | How Sheets comment **anchors** behave; XLSX-export read path | Sheets anchor is `workbook-range` — structured but **not** A1-decodable; cell mapping needs XLSX export |
 | [`comment-lifecycle/`](./comment-lifecycle/) | Comment/reply **lifecycle** semantics (create/reply/resolve/reopen/edit/delete) | `resolved` is **absent** until first resolved; delete is soft and **strips author+content**; action-replies can be content-less |
 | [`docs-suggestions/`](./docs-suggestions/) | Reading vs accepting/rejecting Docs **suggestions** | Reading works (3 view-modes); **no accept/reject endpoint exists** (full API enumeration); suggestion author not exposed |
+| [`sheets-cellmap/`](./sheets-cellmap/) | The real XLSX comment XML structure (for the cell-mapper) + export size | `threadedComments` `ref`=A1 cell; XLSX `id` is an unrelated GUID → match on **author+text+second**; `persons.xml` gives displayName; 120k cells = 0.69 MB (cap ~10 MB) |
 
 ## Shared setup (one-time)
 
