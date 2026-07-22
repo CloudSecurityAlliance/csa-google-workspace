@@ -35,6 +35,8 @@ doc.as_text(suggestions="accepted")                 # preview as if suggestions 
 
 sheet = ws.open(sheet_url)
 sheet.update("Sheet1!A1", [["=SUM(B:B)"]], value_input_option="USER_ENTERED")   # formulas ok
+sheet.append_rows("Sheet1!A1", [["new", "row"]])    # append after the last row
+sheet.as_text(tab="Data")                           # one tab; as_text() renders all tabs
 sheet.comments_by_cell("B11")                       # comments mapped back to a cell (best-effort)
 ```
 

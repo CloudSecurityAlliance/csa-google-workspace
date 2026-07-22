@@ -79,23 +79,24 @@ they're the right release-readiness priorities.
   `fail_under = 85` (total ~87%; the shortfall is the integration-only ApiBackend +
   interactive OAuth paths).
 
-## Tier 3 — real API-surface gaps (within scope)
+## Tier 3 — real API-surface gaps — ✅ DONE
 
-- [ ] **Sheets `append_rows`** (`spreadsheets.values.append`) — the common Sheets write
-  op that's missing; today only `update`/`clear`/`batch_update` exist. Automation/review
-  bots append log rows constantly.
-- [ ] **Slides write symmetry.** Slides exposes only `replace_text` + raw `batch_update`,
-  while Docs has `insert_text`/`append_text`/`delete_range`. Decide whether per-slide
-  text/notes writes belong, or whether the asymmetry is intentional.
-- [ ] **`Sheet.as_text()` renders only the first tab** (`sheet.py`) — multi-tab sheets
-  silently lose data. Add a `tab=` param and/or render all tabs.
+- [x] **Sheets `append_rows`** (`spreadsheets.values.append`, `INSERT_ROWS`). ✅ Added;
+  non-idempotent so never auto-retried on 5xx.
+- [x] **Slides write symmetry.** ✅ Added `Slides.insert_text(object_id, text, index=0)`
+  (shape-addressed, symmetric to `Doc.insert_text`) + `Slide.shape_ids` to discover
+  targetable shapes. Decision: a fuller shape model (bulk shape CRUD) stays out — raw
+  `batch_update` remains the escape hatch; the asymmetry with Docs is inherent (Slides is
+  shape-addressed, Docs is a linear index).
+- [x] **`Sheet.as_text(tab=…)`** ✅ now renders **all** tabs by default (each with a
+  `# <tab>` header when >1), fixing the silent first-tab-only data loss; `tab=` selects one.
 
-### Tier 3 minor / polish (small, tracked in `progress.md`)
+### Tier 3 minor / polish — ✅ already resolved (verified in code)
 
-- [ ] `replace_text` discards `occurrencesChanged` → a no-match is indistinguishable
-  from a match (Doc + Slides).
-- [ ] `Sheet.batch_update` can stale the cell-map cache (raw escape hatch).
-- [ ] `Doc.suggestions` type hint / minor docstring drift.
+- [x] `replace_text` returns `occurrencesChanged` + `match_case` kwarg (Doc + Slides) —
+  fixed in an earlier batch; a no-match (`0`) is distinguishable from a match.
+- [x] `Sheet.batch_update` invalidates the cell-map cache (`self._cell_map_cache = None`).
+- [x] `Doc.suggestions` is typed `list[Suggestion]`.
 
 ## Tier 4 — prove the pitch (scope-adjacent)
 

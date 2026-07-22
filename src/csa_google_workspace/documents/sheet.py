@@ -37,10 +37,26 @@ class Sheet(Document):
                 return props.get("sheetId", 0)
         return 0
 
-    def as_text(self) -> str:
-        rng = self._quote_tab(self.tabs[0]) if self.tabs else "A1:Z1000"
-        rows = self._backend.get_values(self.id, rng)
+    @staticmethod
+    def _render(rows: list) -> str:
         return "\n".join("\t".join(str(c) for c in row) for row in rows)
+
+    def as_text(self, tab: str | None = None) -> str:
+        """Plain text of the grid. By default renders **every** tab (multi-tab sheets are
+        not silently truncated), each prefixed with a `# <tab>` header when there's more
+        than one. Pass `tab=` to render a single tab (no header)."""
+        tabs = self.tabs
+        if not tabs:                       # no sheet metadata: fall back to a default range
+            return self._render(self._backend.get_values(self.id, "A1:Z1000"))
+        if tab is not None:
+            if tab not in tabs:
+                raise ValueError(f"tab {tab!r} not found; available: {tabs}")
+            return self._render(self._backend.get_values(self.id, self._quote_tab(tab)))
+        parts = []
+        for t in tabs:
+            body = self._render(self._backend.get_values(self.id, self._quote_tab(t)))
+            parts.append(f"# {t}\n{body}" if len(tabs) > 1 else body)
+        return "\n\n".join(parts)
 
     def create_comment(self, text: str, cell: str | None = None):
         self._require_writable()
@@ -91,6 +107,13 @@ class Sheet(Document):
         self._require_writable()
         self._cell_map_cache = None
         self._backend.sheets_values_update(self.id, a1_range, values, value_input_option)
+
+    def append_rows(self, a1_range: str, values: list, value_input_option: str = "RAW") -> None:
+        """Append rows after the last row of the table that `a1_range` falls in
+        (Sheets `values.append`, `INSERT_ROWS`). Non-idempotent — never auto-retried."""
+        self._require_writable()
+        self._cell_map_cache = None
+        self._backend.sheets_values_append(self.id, a1_range, values, value_input_option)
 
     def clear(self, a1_range: str) -> None:
         self._require_writable()
