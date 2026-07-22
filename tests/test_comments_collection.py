@@ -1,6 +1,9 @@
-import pytest
 from datetime import datetime, timezone
-from csa_google_workspace import Workspace, exceptions as exc
+
+import pytest
+
+from csa_google_workspace import Workspace
+from csa_google_workspace import exceptions as exc
 from csa_google_workspace.backend import FakeBackend
 
 DOC = "application/vnd.google-apps.document"
@@ -57,8 +60,8 @@ def test_filter_by_author_display_name():
 
 def test_iter_comments():
     d = open_doc()
-    a = d.create_comment("first")
-    b = d.create_comment("second")
+    d.create_comment("first")
+    d.create_comment("second")
     via_iter = list(d.comments)
     via_all = d.comments.all()
     assert len(via_iter) == 2

@@ -39,7 +39,7 @@ def _collect(el: dict, groups) -> None:
 
 
 def extract_suggestions(document: dict) -> list[Suggestion]:
-    groups: "OrderedDict[str, dict]" = OrderedDict()
+    groups: OrderedDict[str, dict] = OrderedDict()
     for el in document.get("body", {}).get("content", []):
         _collect(el, groups)
     return [Suggestion(suggestion_id=sid, kind=g["kind"], text="".join(g["text"]))

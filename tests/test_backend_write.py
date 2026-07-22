@@ -1,4 +1,3 @@
-import pytest
 from csa_google_workspace.backend import FakeBackend
 
 DOC = "application/vnd.google-apps.document"

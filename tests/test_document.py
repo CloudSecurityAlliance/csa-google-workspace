@@ -1,10 +1,11 @@
 import pytest
+
+from csa_google_workspace import exceptions as exc
 from csa_google_workspace.backend import FakeBackend
-from csa_google_workspace.base import subclass_for_mime, Document
+from csa_google_workspace.base import Document, subclass_for_mime
 from csa_google_workspace.documents.doc import Doc
 from csa_google_workspace.documents.sheet import Sheet
 from csa_google_workspace.documents.slides import Slides
-from csa_google_workspace import exceptions as exc
 
 DOC_MIME = "application/vnd.google-apps.document"
 

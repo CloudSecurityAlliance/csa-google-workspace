@@ -1,7 +1,7 @@
 import logging
 
-from ..base import Document
 from .. import _cellmap
+from ..base import Document
 
 _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -54,12 +54,14 @@ class Sheet(Document):
     def _cell_map(self) -> dict:
         if self._cell_map_cache is not None:
             return self._cell_map_cache
-        import zipfile
         import xml.etree.ElementTree as _ET
+        import zipfile
+
         from defusedxml.common import DefusedXmlException
-        from ..exceptions import CsaWorkspaceError
-        from ..comments import Comment
         from googleapiclient.errors import HttpError
+
+        from ..comments import Comment
+        from ..exceptions import CsaWorkspaceError
         try:
             xlsx = self._backend.export_file(self.id, _XLSX)
             roots = _cellmap.parse_xlsx_comments(xlsx)

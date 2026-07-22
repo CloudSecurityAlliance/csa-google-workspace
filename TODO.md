@@ -68,12 +68,16 @@ they're the right release-readiness priorities.
 - [x] **CI that runs the test suite.** ✅ Added in PR #28 — GitHub Actions runs
   `pytest -q` across Python 3.10–3.13 on push + PR (offline; live suite stays gated).
 
-## Tier 2 — formalize the guarantees (small–medium)
+## Tier 2 — formalize the guarantees — ✅ DONE
 
-- [ ] **ruff (lint + format) + mypy (or pyright)** in dev deps and CI — turns "typed"
-  from aspiration into an enforced gate; would have caught boundary bugs like the
-  ones the slow-sweep audit found.
-- [ ] **Coverage reporting** (`pytest-cov`) — strong test suite already exists; measure it.
+- [x] **ruff + mypy in dev deps and CI.** ✅ ruff (lint; E/F/W/I/B/UP, ignoring the
+  deliberate `E702` semicolon style, no auto-formatter) + mypy (`check_untyped_defs`,
+  google stack marked untyped) now run as a dedicated `lint` CI job. Fixed the findings
+  (mostly test cleanups + typing the injected `_backend`/`_file_id` fields and the
+  `CommentsMixin` attributes).
+- [x] **Coverage reporting** (`pytest-cov`). ✅ Wired into the CI matrix with
+  `fail_under = 85` (total ~87%; the shortfall is the integration-only ApiBackend +
+  interactive OAuth paths).
 
 ## Tier 3 — real API-surface gaps (within scope)
 

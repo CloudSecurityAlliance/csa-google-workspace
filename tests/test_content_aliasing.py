@@ -37,7 +37,7 @@ def test_workspace_get_document_returns_copy():
         documents={"f": {"title": "F", "body": {"content": []}}}
     )
     ws = Workspace(backend)
-    doc = ws.open("f")
+    ws.open("f")
     # Access internal backend to verify
     d1 = backend.get_document("f")
     d1["title"] = "MUTATED"

@@ -1,11 +1,10 @@
 from . import exceptions  # noqa: F401
-from .workspace import Workspace
+from .comments import Author, Comment, Location, Reply
 from .documents.doc import Doc
 from .documents.sheet import Sheet
-from .documents.slides import Slides
-from .comments import Comment, Author, Reply, Location
+from .documents.slides import Slide, Slides
 from .suggestions import Suggestion
-from .documents.slides import Slide
+from .workspace import Workspace
 
 __all__ = [
     "Workspace", "Doc", "Sheet", "Slides", "exceptions",

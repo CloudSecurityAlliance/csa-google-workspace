@@ -1,5 +1,5 @@
-from csa_google_workspace.suggestions import Suggestion, extract_suggestions
 from csa_google_workspace.backend import FakeBackend
+from csa_google_workspace.suggestions import extract_suggestions
 
 DOC = "application/vnd.google-apps.document"
 META = {"d": {"id": "d", "name": "D", "mimeType": DOC, "webViewLink": "https://x/document/d/d/edit"}}
@@ -35,7 +35,8 @@ def test_no_author_field():
 
 
 def test_get_document_view_mode_fixture_lookup():
-    b = FakeBackend(META, documents={("d", "PREVIEW_SUGGESTIONS_ACCEPTED"): {"body": {"content": []}, "title": "accepted"}})
+    b = FakeBackend(META, documents={
+        ("d", "PREVIEW_SUGGESTIONS_ACCEPTED"): {"body": {"content": []}, "title": "accepted"}})
     assert b.get_document("d", "PREVIEW_SUGGESTIONS_ACCEPTED")["title"] == "accepted"
 
 

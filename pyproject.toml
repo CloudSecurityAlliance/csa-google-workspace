@@ -44,7 +44,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.6", "mypy>=1.11"]
 
 [project.urls]
 Homepage = "https://github.com/CloudSecurityAlliance/csa-google-workspace"
@@ -67,3 +67,36 @@ csa_google_workspace = ["py.typed"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["experiments", "research", "docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+# E702 (multiple statements on one line via ';') is a deliberate, pervasive style in
+# this codebase (e.g. `self.content = ...; self.html_content = ...`). Not a defect.
+ignore = ["E702"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+
+# The google-api-python-client / google-auth stack ships no type stubs.
+[[tool.mypy.overrides]]
+module = ["googleapiclient.*", "google.*", "google_auth_oauthlib.*", "defusedxml.*"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["csa_google_workspace"]
+branch = true
+
+[tool.coverage.report]
+# Unit suite runs offline against FakeBackend; ApiBackend's real-Google calls and the
+# interactive OAuth flow in auth.py are exercised by the gated integration suite, not here
+# — hence a threshold below 100. Total sits ~87%.
+exclude_lines = ["pragma: no cover", "raise NotImplementedError", "if TYPE_CHECKING:"]
+fail_under = 85

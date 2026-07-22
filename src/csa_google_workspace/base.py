@@ -1,9 +1,9 @@
 """Document base + MIME→subclass mapping. Subclasses live in documents/."""
 from __future__ import annotations
 
-from .backend import Backend
 from . import exceptions as exc
-from .comments import CommentCollection, Comment
+from .backend import Backend
+from .comments import Comment, CommentCollection
 
 MIME_TO_TYPE = {
     "application/vnd.google-apps.document": "document",
@@ -15,6 +15,11 @@ MIME_TO_TYPE = {
 class CommentsMixin:
     """Provides `comments` and `create_comment()` uniformly across document types.
     A subclass may define `_locate_comment(raw_dict)` to enrich `Comment.location` via the locate hook."""
+
+    # Provided by the concrete Document subclass (declared here for the type checker).
+    _backend: Backend
+    id: str
+    read_only: bool
 
     @property
     def comments(self) -> CommentCollection:

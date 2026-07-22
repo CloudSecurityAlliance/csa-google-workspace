@@ -124,7 +124,6 @@ def test_sheet_cell_mapping_live():
 
 
 def test_content_write_live():
-    from csa_google_workspace import Doc, Sheet
     ws = _ws()
     with _throwaway(ws, "application/vnd.google-apps.document", "E2E-DocWrite-THROWAWAY") as fid:
         d = ws.open(fid)

@@ -1,5 +1,7 @@
 import pytest
-from csa_google_workspace import Workspace, exceptions as exc
+
+from csa_google_workspace import Workspace
+from csa_google_workspace import exceptions as exc
 from csa_google_workspace.backend import FakeBackend
 
 DOC = "application/vnd.google-apps.document"

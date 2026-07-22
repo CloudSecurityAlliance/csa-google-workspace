@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING, cast
 
 from .exceptions import ReadOnlyError
+
+if TYPE_CHECKING:
+    from .backend import Backend
 
 
 @dataclass
@@ -30,7 +34,7 @@ class Author:
     photo_url: str | None
 
     @classmethod
-    def from_api(cls, d: dict | None) -> "Author | None":
+    def from_api(cls, d: dict | None) -> Author | None:
         if not d:
             return None
         return cls(display_name=d.get("displayName", ""), email=d.get("emailAddress"),
@@ -47,14 +51,16 @@ class Reply:
     deleted: bool
     created_time: datetime | None
     modified_time: datetime | None
-    # set by Comment/CommentCollection; enable mutation (Task 5)
-    _backend: object = field(default=None, repr=False, compare=False)
-    _file_id: str | None = field(default=None, repr=False, compare=False)
-    _comment_id: str | None = field(default=None, repr=False, compare=False)
+    # Injected by Comment/CommentCollection after construction to enable mutation.
+    # The cast(..., None) defaults let these carry their true (non-Optional) types
+    # while still defaulting to None for the from_api() construction path.
+    _backend: Backend = field(default=cast("Backend", None), repr=False, compare=False)
+    _file_id: str = field(default=cast(str, None), repr=False, compare=False)
+    _comment_id: str = field(default=cast(str, None), repr=False, compare=False)
     _read_only: bool = field(default=False, repr=False, compare=False)
 
     @classmethod
-    def from_api(cls, d: dict) -> "Reply":
+    def from_api(cls, d: dict) -> Reply:
         return cls(id=d["id"], author=Author.from_api(d.get("author")),
                    content=d.get("content"), html_content=d.get("htmlContent"),
                    action=d.get("action"), deleted=bool(d.get("deleted", False)),
@@ -82,19 +88,19 @@ class Comment:
     html_content: str | None
     quoted_text: str | None
     anchor: str | None
-    location: "Location | None"
+    location: Location | None
     resolved: bool
     deleted: bool
     created_time: datetime | None
     modified_time: datetime | None
     replies: list[Reply] = field(default_factory=list)
-    # set by CommentCollection; enable mutation (Task 5)
-    _backend: object = field(default=None, repr=False, compare=False)
-    _file_id: str | None = field(default=None, repr=False, compare=False)
+    # Injected by CommentCollection after construction (see Reply for the cast rationale).
+    _backend: Backend = field(default=cast("Backend", None), repr=False, compare=False)
+    _file_id: str = field(default=cast(str, None), repr=False, compare=False)
     _read_only: bool = field(default=False, repr=False, compare=False)
 
     @classmethod
-    def from_api(cls, d: dict) -> "Comment":
+    def from_api(cls, d: dict) -> Comment:
         quoted = (d.get("quotedFileContent") or {}).get("value")
         return cls(
             id=d["id"], author=Author.from_api(d.get("author")),
@@ -111,14 +117,14 @@ class Comment:
         if self._read_only:
             raise ReadOnlyError("workspace is read_only; cannot mutate comments")
 
-    def reply(self, text: str) -> "Reply":
+    def reply(self, text: str) -> Reply:
         self._guard()
         r = Reply.from_api(self._backend.create_reply(self._file_id, self.id, content=text))
         self._attach_reply(r)
         self.replies.append(r)
         return r
 
-    def resolve(self, text: str = "") -> "Reply":
+    def resolve(self, text: str = "") -> Reply:
         self._guard()
         r = Reply.from_api(self._backend.create_reply(
             self._file_id, self.id, content=text or None, action="resolve"))
@@ -127,7 +133,7 @@ class Comment:
         self.resolved = True
         return r
 
-    def reopen(self, text: str = "") -> "Reply":
+    def reopen(self, text: str = "") -> Reply:
         self._guard()
         r = Reply.from_api(self._backend.create_reply(
             self._file_id, self.id, content=text or None, action="reopen"))
@@ -151,7 +157,7 @@ class Comment:
             r.html_content = None
             r.author = None
 
-    def _attach_reply(self, r: "Reply") -> None:
+    def _attach_reply(self, r: Reply) -> None:
         r._backend = self._backend; r._file_id = self._file_id
         r._comment_id = self.id; r._read_only = self._read_only
 
@@ -165,7 +171,7 @@ class CommentCollection:
         self._read_only = read_only
         self._locate = locate
 
-    def _wrap(self, d: dict) -> "Comment":
+    def _wrap(self, d: dict) -> Comment:
         c = Comment.from_api(d)
         c._backend = self._backend
         c._file_id = self._file_id
@@ -177,15 +183,15 @@ class CommentCollection:
             c.location = self._locate(d)
         return c
 
-    def all(self, include_deleted: bool = False) -> list["Comment"]:
+    def all(self, include_deleted: bool = False) -> list[Comment]:
         return [self._wrap(d) for d in self._backend.list_comments(
             self._file_id, include_deleted=include_deleted)]
 
-    def get(self, comment_id: str) -> "Comment":
+    def get(self, comment_id: str) -> Comment:
         return self._wrap(self._backend.get_comment(self._file_id, comment_id))
 
     def filter(self, *, resolved: bool | None = None, author: str | None = None,
-               since: "datetime | None" = None, include_deleted: bool = False) -> list["Comment"]:
+               since: datetime | None = None, include_deleted: bool = False) -> list[Comment]:
         smt = None
         if since is not None:
             aware = since if since.tzinfo else since.replace(tzinfo=timezone.utc)

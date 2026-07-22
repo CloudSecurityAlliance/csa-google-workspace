@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-21 — Dev tooling: ruff + mypy + coverage gates
+
+Formalized the quality bar as enforced CI gates (no runtime/API change):
+
+- **ruff** (lint): rule set `E,F,W,I,B,UP`, line-length 120, ignoring `E702` (the
+  deliberate one-line `x; y` style). No auto-formatter — the dense style is intentional.
+- **mypy**: `check_untyped_defs`, google/defusedxml marked as missing-stubs. Fixed the
+  real gaps it surfaced — typed the injected `_backend`/`_file_id`/`_comment_id` fields on
+  `Comment`/`Reply` and declared `CommentsMixin`'s subclass-provided attributes.
+- **coverage** (`pytest-cov`): enforced on the CI matrix with `fail_under = 85` (total
+  ~87%; the gap is the integration-only `ApiBackend` calls + interactive OAuth flow).
+- CI now has a dedicated `lint` job (ruff + mypy) alongside the 3.10–3.13 `test` matrix.
+
 ## 2026-07-21 — Packaged for PyPI (v0.1.0)
 
 First release-ready packaging pass, alongside the correctness fixes from an external audit.

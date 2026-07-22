@@ -1,5 +1,5 @@
-from ..base import Document
 from .. import _content
+from ..base import Document
 
 
 class Slide:

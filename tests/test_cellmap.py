@@ -1,7 +1,9 @@
-import io, zipfile
+import io
+import zipfile
 from datetime import datetime, timezone
+
 from csa_google_workspace import _cellmap
-from csa_google_workspace.comments import Comment, Author, Location
+from csa_google_workspace.comments import Author, Comment
 
 NS = "http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments"
 

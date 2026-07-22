@@ -10,7 +10,7 @@ def _element_text(el: dict) -> str:
     if "paragraph" in el:
         return _para_text(el["paragraph"])
     if "table" in el:
-        parts = []
+        parts: list[str] = []
         for row in el["table"].get("tableRows", []):
             for cell in row.get("tableCells", []):
                 parts.extend(_element_text(c) for c in cell.get("content", []))

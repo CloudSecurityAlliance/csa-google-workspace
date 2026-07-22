@@ -1,6 +1,6 @@
+from .. import _content
+from .. import suggestions as _suggestions
 from ..base import Document
-from .. import _content, suggestions as _suggestions
-
 
 _VIEW = {"inline": "SUGGESTIONS_INLINE", "accepted": "PREVIEW_SUGGESTIONS_ACCEPTED",
          "rejected": "PREVIEW_WITHOUT_SUGGESTIONS"}

@@ -1,6 +1,7 @@
 import pytest
-from csa_google_workspace.backend import FakeBackend, ApiBackend
+
 from csa_google_workspace import exceptions as exc
+from csa_google_workspace.backend import ApiBackend, FakeBackend
 
 FILES = {"doc1": {"id": "doc1", "name": "D", "mimeType": "application/vnd.google-apps.document",
                   "webViewLink": "https://docs.google.com/document/d/doc1/edit"}}
