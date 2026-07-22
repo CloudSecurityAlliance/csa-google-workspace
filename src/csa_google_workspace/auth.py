@@ -18,7 +18,15 @@ def scopes_for(read_only: bool) -> list[str]:
 
 
 def needs_reconsent(granted: list[str], required: list[str]) -> bool:
-    return not set(required).issubset(set(granted or []))
+    granted_set = set(granted or [])
+    for scope in required:
+        if scope in granted_set:
+            continue
+        base = scope[: -len(".readonly")] if scope.endswith(".readonly") else None
+        if base and base in granted_set:
+            continue  # a granted RW scope satisfies a required readonly scope
+        return True
+    return False
 
 
 def load_credentials(client_secrets: str, token_path: str, read_only: bool) -> Credentials:
@@ -41,9 +49,10 @@ def load_credentials(client_secrets: str, token_path: str, read_only: bool) -> C
             raise AuthError(f"could not load or refresh cached credentials: {e}") from e
     else:
         creds = InstalledAppFlow.from_client_secrets_file(client_secrets, required).run_local_server(port=0)
-    token_dir = os.path.dirname(token_path) or "."
-    os.makedirs(token_dir, exist_ok=True)
-    os.chmod(token_dir, 0o700)
+    token_dir = os.path.dirname(token_path)
+    if token_dir:
+        os.makedirs(token_dir, exist_ok=True)
+        os.chmod(token_dir, 0o700)
     fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(creds.to_json())

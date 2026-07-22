@@ -30,18 +30,25 @@ def doc_paragraphs(document: dict) -> list[str]:
     return out
 
 
-def slide_text(slide: dict) -> str:
+def _page_element_text(pe: dict) -> str:
+    """Extract text from a Slides pageElement: shape text, table cell text (recursively),
+    and nested elementGroup children (recursively)."""
     parts = []
-    for pe in slide.get("pageElements", []):
-        for te in pe.get("shape", {}).get("text", {}).get("textElements", []):
-            parts.append(te.get("textRun", {}).get("content", ""))
+    for te in pe.get("shape", {}).get("text", {}).get("textElements", []):
+        parts.append(te.get("textRun", {}).get("content", ""))
+    for row in pe.get("table", {}).get("tableRows", []):
+        for cell in row.get("tableCells", []):
+            for te in cell.get("text", {}).get("textElements", []):
+                parts.append(te.get("textRun", {}).get("content", ""))
+    for child in pe.get("elementGroup", {}).get("children", []):
+        parts.append(_page_element_text(child))
     return "".join(parts)
+
+
+def slide_text(slide: dict) -> str:
+    return "".join(_page_element_text(pe) for pe in slide.get("pageElements", []))
 
 
 def slide_notes(slide: dict) -> str:
     notes = (slide.get("slideProperties", {}).get("notesPage", {}))
-    return "".join(
-        te.get("textRun", {}).get("content", "")
-        for pe in notes.get("pageElements", [])
-        for te in pe.get("shape", {}).get("text", {}).get("textElements", [])
-    )
+    return "".join(_page_element_text(pe) for pe in notes.get("pageElements", []))

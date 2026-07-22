@@ -44,3 +44,23 @@ def test_filter_by_since():
     # FakeBackend comments carry a fixed ~2026 modifiedTime: a past `since` includes, a future one excludes
     assert len(d.comments.filter(since=datetime(2020, 1, 1, tzinfo=timezone.utc))) == 1
     assert d.comments.filter(since=datetime(2030, 1, 1, tzinfo=timezone.utc)) == []
+
+
+def test_filter_by_author_display_name():
+    d = open_doc()
+    d.create_comment("test")
+    # FakeBackend sets author displayName to "Test User"
+    result = d.comments.filter(author="Test User")
+    assert len(result) == 1
+    assert result[0].author.display_name == "Test User"
+
+
+def test_iter_comments():
+    d = open_doc()
+    a = d.create_comment("first")
+    b = d.create_comment("second")
+    via_iter = list(d.comments)
+    via_all = d.comments.all()
+    assert len(via_iter) == 2
+    assert len(via_all) == 2
+    assert [c.id for c in via_iter] == [c.id for c in via_all]

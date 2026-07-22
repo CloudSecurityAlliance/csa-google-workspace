@@ -1,4 +1,5 @@
-from csa_google_workspace import Workspace
+import pytest
+from csa_google_workspace import Workspace, exceptions as exc
 from csa_google_workspace.backend import FakeBackend
 
 SHEET = "application/vnd.google-apps.spreadsheet"
@@ -42,3 +43,19 @@ def test_quote_tab_quotes_cell_like_names():
     assert s._quote_tab("Q1") == "'Q1'"
     assert s._quote_tab("AB12") == "'AB12'"
     assert s._quote_tab("Sheet1") == "Sheet1"
+
+
+def test_create_comment_read_only_raises_before_any_spreadsheet_network_call():
+    # No `spreadsheets` fixture at all: if _gid() (get_spreadsheet) ran before the
+    # read_only check, this would raise NotFoundError instead of ReadOnlyError.
+    b = FakeBackend(META)
+    s = Workspace(b, read_only=True).open("s")
+    with pytest.raises(exc.ReadOnlyError):
+        s.create_comment("check this", cell="B1")
+
+
+def test_create_comment_invalidates_cell_map_cache():
+    s = _sheet([("Sheet1", 0)])
+    s._cell_map_cache = {"stale": "value"}
+    s.create_comment("just a note")
+    assert s._cell_map_cache is None

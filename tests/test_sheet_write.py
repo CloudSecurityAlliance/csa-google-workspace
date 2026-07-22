@@ -42,3 +42,15 @@ def test_writes_blocked_when_read_only():
     for call in (lambda: s.update("A1", [["x"]]), lambda: s.clear("A1"), lambda: s.batch_update([{}])):
         with pytest.raises(exc.ReadOnlyError):
             call()
+
+
+def test_writes_invalidate_cell_map_cache():
+    for write in (
+        lambda s: s.update("Sheet1!A1", [["x"]]),
+        lambda s: s.clear("Sheet1!A1"),
+        lambda s: s.batch_update([{"repeatCell": {}}]),
+    ):
+        s, _ = sheet()
+        s._cell_map_cache = {"stale": "value"}   # pretend a prior read populated the cache
+        write(s)
+        assert s._cell_map_cache is None

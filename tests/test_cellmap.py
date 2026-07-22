@@ -52,6 +52,21 @@ def test_match_by_author_content_second():
     assert out["cid1"].cell == "B11"
 
 
+def _threaded_nested_run(ref, dT, cid, text):
+    """A threadedComment whose <text> wraps content in a nested <r><t> run element,
+    as some real-world exports do."""
+    return (f'<ThreadedComments xmlns="{NS}"><threadedComment ref="{ref}" dT="{dT}" '
+            f'personId="P1" id="{cid}"><text><r><t>{text}</t></r></text></threadedComment>'
+            f'</ThreadedComments>')
+
+
+def test_parse_extracts_nested_run_text():
+    xml = _threaded_nested_run("D4", "2026-07-20T23:05:59.00", "R1", "run-wrapped text")
+    roots = _cellmap.parse_xlsx_comments(_xlsx(xml, PERSONS))
+    assert len(roots) == 1
+    assert roots[0]["text"] == "run-wrapped text"
+
+
 def test_ambiguous_duplicate_yields_no_match():
     xml = _threaded([("B11", "2026-07-20T23:05:59.00", "R1", "dup", None),
                      ("C22", "2026-07-20T23:05:59.00", "R2", "dup", None)])

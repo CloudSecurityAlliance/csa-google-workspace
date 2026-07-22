@@ -39,6 +39,8 @@ class Sheet(Document):
         return "\n".join("\t".join(str(c) for c in row) for row in rows)
 
     def create_comment(self, text: str, cell: str | None = None):
+        self._require_writable()
+        self._cell_map_cache = None
         if cell is None:
             return super().create_comment(text)
         gid = self._gid()
@@ -49,6 +51,8 @@ class Sheet(Document):
         if self._cell_map_cache is not None:
             return self._cell_map_cache
         import zipfile
+        import xml.etree.ElementTree as _ET
+        from defusedxml.common import DefusedXmlException
         from ..exceptions import CsaWorkspaceError
         from ..comments import Comment
         from googleapiclient.errors import HttpError
@@ -56,8 +60,9 @@ class Sheet(Document):
             xlsx = self._backend.export_file(self.id, _XLSX)
             roots = _cellmap.parse_xlsx_comments(xlsx)
             raw = self._backend.list_comments(self.id, include_deleted=False)
-        except (CsaWorkspaceError, HttpError, zipfile.BadZipFile):
-            return {}                      # transient/malformed: degrade WITHOUT memoizing -> retry next call
+        except (CsaWorkspaceError, HttpError, zipfile.BadZipFile,
+                _ET.ParseError, DefusedXmlException):
+            return {}                      # transient/malformed/malicious: degrade WITHOUT memoizing -> retry next call
         comments = [Comment.from_api(d) for d in raw]
         self._cell_map_cache = _cellmap.match_locations(comments, roots)   # pure; a bug here propagates
         return self._cell_map_cache
@@ -73,12 +78,15 @@ class Sheet(Document):
 
     def update(self, a1_range: str, values: list, value_input_option: str = "RAW") -> None:
         self._require_writable()
+        self._cell_map_cache = None
         self._backend.sheets_values_update(self.id, a1_range, values, value_input_option)
 
     def clear(self, a1_range: str) -> None:
         self._require_writable()
+        self._cell_map_cache = None
         self._backend.sheets_values_clear(self.id, a1_range)
 
     def batch_update(self, requests: list) -> dict:
         self._require_writable()
+        self._cell_map_cache = None
         return self._backend.sheets_batch_update(self.id, requests)

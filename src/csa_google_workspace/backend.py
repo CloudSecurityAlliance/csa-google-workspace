@@ -189,7 +189,8 @@ class ApiBackend:
 
     def get_file_metadata(self, file_id: str) -> dict:
         return (self._services.drive.files()
-                .get(fileId=file_id, fields="id,name,mimeType,webViewLink")
+                .get(fileId=file_id, fields="id,name,mimeType,webViewLink",
+                     supportsAllDrives=True)
                 .execute())
 
     def accept_suggestion(self, file_id: str, suggestion_id: str) -> None:
@@ -235,7 +236,8 @@ class ApiBackend:
 
     def create_comment(self, file_id, content):
         return _errors.call(self._comments().create(
-            fileId=file_id, body={"content": content}, fields=self._CF).execute)
+            fileId=file_id, body={"content": content}, fields=self._CF).execute,
+            idempotent=False)
 
     def create_reply(self, file_id, comment_id, content=None, action=None):
         body = {}
@@ -244,23 +246,28 @@ class ApiBackend:
         if action:
             body["action"] = action
         return _errors.call(self._services.drive.replies().create(
-            fileId=file_id, commentId=comment_id, body=body, fields=self._RF).execute)
+            fileId=file_id, commentId=comment_id, body=body, fields=self._RF).execute,
+            idempotent=False)
 
     def update_comment(self, file_id, comment_id, content):
         return _errors.call(self._comments().update(
-            fileId=file_id, commentId=comment_id, body={"content": content}, fields=self._CF).execute)
+            fileId=file_id, commentId=comment_id, body={"content": content}, fields=self._CF).execute,
+            idempotent=False)
 
     def update_reply(self, file_id, comment_id, reply_id, content):
         return _errors.call(self._services.drive.replies().update(
             fileId=file_id, commentId=comment_id, replyId=reply_id,
-            body={"content": content}, fields=self._RF).execute)
+            body={"content": content}, fields=self._RF).execute,
+            idempotent=False)
 
     def delete_comment(self, file_id, comment_id):
-        _errors.call(self._comments().delete(fileId=file_id, commentId=comment_id).execute)
+        _errors.call(self._comments().delete(fileId=file_id, commentId=comment_id).execute,
+                     idempotent=False)
 
     def delete_reply(self, file_id, comment_id, reply_id):
         _errors.call(self._services.drive.replies().delete(
-            fileId=file_id, commentId=comment_id, replyId=reply_id).execute)
+            fileId=file_id, commentId=comment_id, replyId=reply_id).execute,
+            idempotent=False)
 
     def export_file(self, file_id, mime_type):
         return _errors.call(self._services.drive.files()
@@ -287,21 +294,26 @@ class ApiBackend:
 
     def docs_batch_update(self, file_id, requests):
         return _errors.call(self._services.docs.documents().batchUpdate(
-            documentId=file_id, body={"requests": requests}).execute)
+            documentId=file_id, body={"requests": requests}).execute,
+            idempotent=False)
 
     def sheets_values_update(self, file_id, a1_range, values, value_input_option="RAW"):
         return _errors.call(self._services.sheets.spreadsheets().values().update(
             spreadsheetId=file_id, range=a1_range, valueInputOption=value_input_option,
-            body={"values": values}).execute)
+            body={"values": values}).execute,
+            idempotent=False)
 
     def sheets_values_clear(self, file_id, a1_range):
         return _errors.call(self._services.sheets.spreadsheets().values().clear(
-            spreadsheetId=file_id, range=a1_range, body={}).execute)
+            spreadsheetId=file_id, range=a1_range, body={}).execute,
+            idempotent=False)
 
     def sheets_batch_update(self, file_id, requests):
         return _errors.call(self._services.sheets.spreadsheets().batchUpdate(
-            spreadsheetId=file_id, body={"requests": requests}).execute)
+            spreadsheetId=file_id, body={"requests": requests}).execute,
+            idempotent=False)
 
     def slides_batch_update(self, file_id, requests):
         return _errors.call(self._services.slides.presentations().batchUpdate(
-            presentationId=file_id, body={"requests": requests}).execute)
+            presentationId=file_id, body={"requests": requests}).execute,
+            idempotent=False)
