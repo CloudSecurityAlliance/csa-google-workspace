@@ -8,6 +8,14 @@ from datetime import datetime, timezone
 from .exceptions import ReadOnlyError
 
 
+@dataclass
+class Location:
+    cell: str
+    row: int
+    col: int
+    tab: str | None = None
+
+
 def parse_time(s: str | None) -> datetime | None:
     if not s:
         return None
@@ -74,7 +82,7 @@ class Comment:
     html_content: str | None
     quoted_text: str | None
     anchor: str | None
-    location: object | None  # populated in the Sheets cell-mapping phase; None here
+    location: "Location | None"
     resolved: bool
     deleted: bool
     created_time: datetime | None
@@ -151,10 +159,11 @@ class Comment:
 class CommentCollection:
     """Lazy, filterable view of a file's comments."""
 
-    def __init__(self, backend, file_id: str, read_only: bool):
+    def __init__(self, backend, file_id: str, read_only: bool, locate=None):
         self._backend = backend
         self._file_id = file_id
         self._read_only = read_only
+        self._locate = locate
 
     def _wrap(self, d: dict) -> "Comment":
         c = Comment.from_api(d)
@@ -164,6 +173,8 @@ class CommentCollection:
         for r in c.replies:
             r._backend = self._backend; r._file_id = self._file_id
             r._comment_id = c.id; r._read_only = self._read_only
+        if self._locate is not None:
+            c.location = self._locate(d)
         return c
 
     def all(self, include_deleted: bool = False) -> list["Comment"]:

@@ -106,3 +106,18 @@ def test_slides_end_to_end_live():
             {"insertText": {"objectId": "e2etextbox1", "text": "E2E slide text"}}]}).execute()
         assert "E2E slide text" in ws.open(fid).as_text()
         _assert_comment_lifecycle(p)
+
+
+def test_sheet_cell_mapping_live():
+    from csa_google_workspace import Sheet
+    ws = _ws()
+    with _throwaway(ws, "application/vnd.google-apps.spreadsheet", "E2E-CellMap-THROWAWAY") as fid:
+        ws._backend._services.sheets.spreadsheets().values().update(
+            spreadsheetId=fid, range="A1", valueInputOption="RAW",
+            body={"values": [["hdr"]]}).execute()
+        s = ws.open(fid)
+        assert isinstance(s, Sheet)
+        c = s.create_comment("map me")           # API comment -> lands on A1 in the export
+        loc = s.comments.get(c.id).location
+        assert loc is not None and loc.cell == "A1", f"expected A1, got {loc}"
+        c.delete()

@@ -15,7 +15,8 @@ MIME_TO_TYPE = {
 class CommentsMixin:
     @property
     def comments(self) -> CommentCollection:
-        return CommentCollection(self._backend, self.id, self.read_only)
+        return CommentCollection(self._backend, self.id, self.read_only,
+                                 locate=getattr(self, "_locate_comment", None))
 
     def create_comment(self, content: str) -> Comment:
         if self.read_only:
