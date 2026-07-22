@@ -4,10 +4,10 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 
 ## What this repository is
 
-`csa-google-workspace` — a **Python library** (import name `csa_google_workspace`) for managing **comments** and (planned) **content** on Google **Docs, Sheets, and Slides**. It is **under active, phased development**: research and design are done and merged; the code is being built one reviewed phase at a time.
+`csa-google-workspace` — a **Python library** (import name `csa_google_workspace`) for managing **comments** and **content** on Google **Docs, Sheets, and Slides**. It is **feature-complete for its scoped roadmap** and live-verified end-to-end against real Google (the gated suite in `tests/integration/`); remaining work is tracked polish + explicit deferrals.
 
-- **Shipped:** Phase 1 (foundations) + Phase 2 (full comment management). The library can open a Doc/Sheet/Slides by id/URL and list/filter/create/reply/resolve/reopen/edit/soft-delete comments across all three, uniformly.
-- **Planned (see `docs/superpowers/plans/`):** content read (`as_text`/`export`, `Doc.paragraphs`/`Sheet.values`/`Slides.slides`), Sheets cell-mapping (`Comment.location`), content write, and reading Docs suggestions.
+- **Shipped (all live-verified; the six phase plans are in `docs/superpowers/plans/`):** comment management (list/filter/create/reply/resolve/reopen/edit/soft-delete); content read (`as_text`/`export`, `Doc.paragraphs`, `Sheet.values`/`tabs`, `Slides.slides`/notes); content write (`replace_text`/`insert_text`/`append_text`/`delete_range`/`update`/`clear`/`batch_update`, `read_only`-gated); Sheets comment→cell mapping (`Comment.location`, `sheet.comments_by_cell`, `create_comment(cell=)` deep-link); Docs suggestions read (`Doc.suggestions`, `as_text(suggestions="accepted"|"rejected"|"inline")`).
+- **Deferred (tracked, not bugs):** `Location.tab` resolution (multi-tab cell disambiguation via `workbook.xml`+rels); a caching pass (accessors re-fetch per call, by design); accept/reject of suggestions & true cell-anchored comment creation — API-impossible, reserved for a future `PlaywrightBackend`.
 
 This is **not** a TypeScript MCP server and **not** comments-only — earlier drafts said so; both are obsolete. An MCP wrapper is possible later but out of scope.
 
@@ -25,8 +25,11 @@ This is **not** a TypeScript MCP server and **not** comments-only — earlier dr
 - `auth.py` — OAuth installed-app flow, scope selection, re-consent detection.
 - `backend.py` — `Backend` protocol; `ApiBackend` (real Google APIs) + `FakeBackend` (in-memory, powers all unit tests).
 - `_services.py` — lazy Google API client registry. `_errors.py` — `HttpError`→typed translator + retry.
-- `base.py` — `Document` base + `CommentsMixin`. `documents/` — `Doc`/`Sheet`/`Slides`.
-- `comments.py` — `Author`/`Reply`/`Comment`/`CommentCollection` + in-place mutation.
+- `base.py` — `Document` base + `CommentsMixin`. `documents/` — `Doc`/`Sheet`/`Slides` (per-type content read/write).
+- `comments.py` — `Author`/`Reply`/`Comment`/`Location`/`CommentCollection` + in-place mutation.
+- `suggestions.py` — `Suggestion` + read-only suggestion extraction (grouped by suggestion id).
+- `_cellmap.py` — Sheets comment→cell mapping: XLSX-export → parse `threadedComments` (defusedxml) → A1.
+- `_content.py` — plain-text extraction walkers for Docs/Slides.
 - `exceptions.py` — typed error hierarchy.
 
 ## Critical architectural facts
@@ -52,5 +55,5 @@ CSA_GW_INTEGRATION=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tes
 
 - **Branch + PR for every change** (never commit to `main`); merge when CI is green.
 - **CI is GitHub CodeQL default-setup + a Python analyze job** (no workflow files in-repo). Two gotchas seen: CodeQL flags `"host" in url`-style substring checks (`py/incomplete-url-substring-sanitization`) even in test assertions; and an OAuth **scope grant ≠ API enablement** — a scoped token still 403s `SERVICE_DISABLED` until each API (Docs/Sheets/Slides) is enabled in the Cloud project.
-- **New phases follow the plan-then-execute rhythm:** write a spec/plan under `docs/superpowers/`, then implement TDD (unit tests via `FakeBackend`). Keep `README.md`'s manifest in sync.
+- **The feature roadmap is complete;** any new work (a deferred item or a new feature) follows the same **plan-then-execute rhythm:** write a spec/plan under `docs/superpowers/`, then implement TDD (unit tests via `FakeBackend`). Keep `README.md`'s manifest in sync.
 - OAuth secrets (`credentials.json`, `token*.json`) and probe transcripts are gitignored — never commit them.
