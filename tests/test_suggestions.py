@@ -43,3 +43,12 @@ def test_get_document_falls_back_to_plain_key():
     b = FakeBackend(META, documents={"d": {"title": "plain"}})
     assert b.get_document("d")["title"] == "plain"                    # existing single-arg behavior intact
     assert b.get_document("d", "SUGGESTIONS_INLINE")["title"] == "plain"  # falls back to plain key
+
+
+def test_suggestion_inside_table_cell_is_found():
+    doc = {"body": {"content": [
+        {"table": {"tableRows": [{"tableCells": [
+            {"content": [{"paragraph": {"elements": [
+                {"textRun": {"content": "in cell", "suggestedInsertionIds": ["t1"]}}]}}]}]}]}}]}}
+    sugg = extract_suggestions(doc)
+    assert len(sugg) == 1 and sugg[0].text == "in cell" and sugg[0].kind == "insertion"

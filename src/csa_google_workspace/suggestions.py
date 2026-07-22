@@ -14,12 +14,9 @@ class Suggestion:
     text: str
 
 
-def extract_suggestions(document: dict) -> list[Suggestion]:
-    groups: "OrderedDict[str, dict]" = OrderedDict()
-    for el in document.get("body", {}).get("content", []):
-        para = el.get("paragraph")
-        if not para:
-            continue
+def _collect(el: dict, groups) -> None:
+    para = el.get("paragraph")
+    if para:
         for pe in para.get("elements", []):
             tr = pe.get("textRun")
             if not tr:
@@ -32,5 +29,18 @@ def extract_suggestions(document: dict) -> list[Suggestion]:
             kind = "insertion" if ins else "deletion"
             g = groups.setdefault(sid, {"kind": kind, "text": []})
             g["text"].append(tr.get("content", ""))
+        return
+    table = el.get("table")
+    if table:
+        for row in table.get("tableRows", []):
+            for cell in row.get("tableCells", []):
+                for c in cell.get("content", []):
+                    _collect(c, groups)
+
+
+def extract_suggestions(document: dict) -> list[Suggestion]:
+    groups: "OrderedDict[str, dict]" = OrderedDict()
+    for el in document.get("body", {}).get("content", []):
+        _collect(el, groups)
     return [Suggestion(suggestion_id=sid, kind=g["kind"], text="".join(g["text"]))
             for sid, g in groups.items()]

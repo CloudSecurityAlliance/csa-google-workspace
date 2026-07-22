@@ -43,3 +43,8 @@ def test_as_text_accepted_and_rejected_previews():
 def test_as_text_default_still_works():
     d = Workspace(_doc_with_modes()).open("d")
     assert "Base" in d.as_text()
+
+
+def test_as_text_inline_mode():
+    d = Workspace(_doc_with_modes()).open("d")
+    assert d.as_text(suggestions="inline") == "Base added"
