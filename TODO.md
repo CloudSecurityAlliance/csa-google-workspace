@@ -17,11 +17,16 @@ publish it to PyPI.** The correctness findings in Tier 0 below and the release-r
 work in Tier 1 are the substance of that milestone; Tier 2 tooling supports it. Treat
 these three tiers as the "1.0-on-PyPI" work-package.
 
-## Tier 0 — audit findings (correctness; do first)
+**Progress (2026-07-21):** Tier 0 fixes (PR #26), `py.typed` (PR #27), and pytest CI
+(PR #28) are done. **The one remaining blocker for a first PyPI publish is the package
+metadata** item in Tier 1 (below). Tier 2 tooling (ruff/mypy/coverage) is optional polish
+on top, not a publish blocker.
 
-Confirmed by an external review (2026-07-21) and re-verified against the code:
+## Tier 0 — audit findings (correctness) — ✅ DONE
 
-- [ ] **`Workspace.open()` leaks a raw `HttpError`.** `ApiBackend.get_file_metadata`
+Confirmed by an external review (2026-07-21), re-verified against the code, and fixed:
+
+- [x] **`Workspace.open()` leaks a raw `HttpError`.** ✅ Fixed in PR #26. `ApiBackend.get_file_metadata`
   (`backend.py:190`) is the *only* data method that calls `.execute()` without
   `_errors.call(...)`, so the first call a consumer makes raises a raw
   `googleapiclient.errors.HttpError` on a missing/forbidden/service-disabled file
@@ -30,7 +35,8 @@ Confirmed by an external review (2026-07-21) and re-verified against the code:
   feeds a stub service raising `HttpError` and asserts typed translation — no
   `FakeBackend` test can catch this class of bug, because the fake raises typed errors
   directly (the one blind spot of the fake/real seam).
-- [ ] **Cell-map degrade is spec-noncompliant (no recorded warning).** The spec
+- [x] **Cell-map degrade is spec-noncompliant (no recorded warning).** ✅ Fixed in PR #26
+  (stdlib `logging` WARNING on degrade; genuine no-match stays quiet). The spec
   (`docs/superpowers/specs/2026-07-20-csa-google-workspace-design.md:334`) requires
   `_cellmap` to degrade to `location=None` **plus a recorded warning**. `sheet.py:63`
   does the `location=None` half but records nothing, so export-cap-exceeded,
@@ -44,17 +50,14 @@ Confirmed by an external review (2026-07-21) and re-verified against the code:
 Both items below were independently flagged by the same external review — good signal
 they're the right release-readiness priorities.
 
-- [ ] **`py.typed` marker (PEP 561).** The source is fully type-hinted, but there's no
-  marker + `package-data` entry, so a downstream MCP/plugin author's `mypy`/`pyright`
-  treats `csa_google_workspace` as *untyped*. Directly undercuts the "clean, typed
-  surface" positioning in the README. ~10 lines.
+- [x] **`py.typed` marker (PEP 561).** ✅ Shipped in PR #27 (marker + `package-data`;
+  verified present in a built wheel + a packaging test guards it).
 - [ ] **Package metadata.** `pyproject.toml` has no `readme`, `license`/license-files,
   `classifiers`, `keywords`, `[project.urls]` (repo, issues), or `authors`. It's
   `0.0.1` with no PyPI-facing identity. Add these; decide on a first tagged release.
-- [ ] **CI that runs the test suite.** CI today is CodeQL default-setup + a Python
-  *analyze* job — the 146 unit tests (which guard every probe-verified Google quirk)
-  **never run on a PR**. Add a small GitHub Actions workflow: `pytest` across
-  Python 3.10–3.13.
+  **← the remaining blocker for the first PyPI publish.**
+- [x] **CI that runs the test suite.** ✅ Added in PR #28 — GitHub Actions runs
+  `pytest -q` across Python 3.10–3.13 on push + PR (offline; live suite stays gated).
 
 ## Tier 2 — formalize the guarantees (small–medium)
 
@@ -99,9 +102,9 @@ These are recorded design decisions, **not bugs**:
 - [ ] **Caching pass** — accessors re-fetch per call by design (the tool is used in live
   multi-reviewer sessions where a self-only-invalidated cache goes stale). An *opt-in* /
   request-scoped cache is the biggest runtime win for embedded review sessions.
-- [ ] **10 MB XLSX export cap** — large sheets silently degrade the cell-map; accepted
-  today (no logging infra to surface it). → Closed by the shared logging/warnings story
-  in **Tier 0** (cell-map degrade); once that lands, this stops being silent.
+- [x] **10 MB XLSX export cap** — large sheets degrade the cell-map. ✅ No longer *silent*
+  as of PR #26: the shared logging story records a WARNING naming the cause. (Raising the
+  cap itself is still out of reach — it's a Google export limit.)
 - [ ] **Accept/reject suggestions & true cell-anchored comment creation** — API-impossible
   (proven by probe); reserved for a future `PlaywrightBackend`. `ApiBackend` raises
   `UnsupportedOperation`.
