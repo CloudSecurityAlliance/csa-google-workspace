@@ -40,6 +40,10 @@ class Author:
         return cls(display_name=d.get("displayName", ""), email=d.get("emailAddress"),
                    is_me=bool(d.get("me", False)), photo_url=d.get("photoLink"))
 
+    def __repr__(self) -> str:
+        # Redacted: omit email (PII) — see #49. display_name kept for identification.
+        return f"Author(display_name={self.display_name!r}, is_me={self.is_me})"
+
 
 @dataclass
 class Reply:
@@ -66,6 +70,11 @@ class Reply:
                    action=d.get("action"), deleted=bool(d.get("deleted", False)),
                    created_time=parse_time(d.get("createdTime")),
                    modified_time=parse_time(d.get("modifiedTime")))
+
+    def __repr__(self) -> str:
+        # Redacted: omit content/html_content (document text) — see #49.
+        n = len(self.content) if self.content else 0
+        return f"Reply(id={self.id!r}, action={self.action!r}, deleted={self.deleted}, content_chars={n})"
 
     def edit(self, text: str) -> None:
         if self._backend is None:
@@ -118,6 +127,12 @@ class Comment:
             modified_time=parse_time(d.get("modifiedTime")),
             replies=[Reply.from_api(r) for r in d.get("replies", [])],
         )
+
+    def __repr__(self) -> str:
+        # Redacted: omit content/quoted_text/html_content (document text) and author email — see #49.
+        n = len(self.content) if self.content else 0
+        return (f"Comment(id={self.id!r}, resolved={self.resolved}, deleted={self.deleted}, "
+                f"replies={len(self.replies)}, content_chars={n}, quoted={self.quoted_text is not None})")
 
     def _guard(self):
         if self._backend is None:

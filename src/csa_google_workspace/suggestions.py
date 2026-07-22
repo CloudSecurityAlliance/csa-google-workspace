@@ -13,6 +13,10 @@ class Suggestion:
     kind: Literal["insertion", "deletion"]
     text: str
 
+    def __repr__(self) -> str:
+        # Redacted: omit text (document content) — see #49.
+        return f"Suggestion(suggestion_id={self.suggestion_id!r}, kind={self.kind!r}, text_chars={len(self.text)})"
+
 
 def _collect(el: dict, groups) -> None:
     para = el.get("paragraph")
