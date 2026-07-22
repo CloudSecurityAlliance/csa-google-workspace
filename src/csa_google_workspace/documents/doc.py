@@ -1,6 +1,6 @@
 from .. import _content
 from .. import suggestions as _suggestions
-from ..base import Document
+from ..base import Document, occurrences_changed
 
 _VIEW = {"inline": "SUGGESTIONS_INLINE", "accepted": "PREVIEW_SUGGESTIONS_ACCEPTED",
          "rejected": "PREVIEW_WITHOUT_SUGGESTIONS"}
@@ -29,7 +29,7 @@ class Doc(Document):
         self._require_writable()
         resp = self._backend.docs_batch_update(self.id, [{"replaceAllText": {
             "containsText": {"text": find, "matchCase": match_case}, "replaceText": replace}}])
-        return (resp.get("replies") or [{}])[0].get("replaceAllText", {}).get("occurrencesChanged", 0)
+        return occurrences_changed(resp)
 
     def insert_text(self, text: str, at: int) -> None:
         self._require_writable()

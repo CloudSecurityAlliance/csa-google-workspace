@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from ..comments import Comment
 
 _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+_DEFAULT_RANGE = "A1:Z1000"   # fallback for as_text() when no tab metadata is available
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ class Sheet(Document):
         than one. Pass `tab=` to render a single tab (no header)."""
         tabs = self.tabs
         if not tabs:                       # no sheet metadata: fall back to a default range
-            return self._render(self._backend.get_values(self.id, "A1:Z1000"))
+            return self._render(self._backend.get_values(self.id, _DEFAULT_RANGE))
         if tab is not None:
             if tab not in tabs:
                 raise ValueError(f"tab {tab!r} not found; available: {tabs}")

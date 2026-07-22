@@ -33,7 +33,8 @@ def test_open_returns_typed_subclass():
 
 def test_open_by_url_extracts_id_then_opens():
     ws = Workspace(FakeBackend(FILES))
-    d = ws.open_by_url("https://docs.google.com/document/d/d1/edit")
+    with pytest.warns(DeprecationWarning):
+        d = ws.open_by_url("https://docs.google.com/document/d/d1/edit")
     assert isinstance(d, Doc) and d.id == "d1"
 
 

@@ -58,6 +58,20 @@ def test_filter_by_author_display_name():
     assert result[0].author.display_name == "Test User"
 
 
+def test_filter_by_author_excludes_non_matches():
+    d = open_doc()
+    d.create_comment("test")
+    assert d.comments.filter(author="Someone Else") == []      # exclusion arm (audit #29)
+
+
+def test_filter_by_author_matches_email():
+    d = open_doc()
+    c = d.create_comment("test")
+    # FakeBackend omits emailAddress by default; inject one to exercise the email-match arm
+    d._backend._comments[(d.id, c.id)]["author"]["emailAddress"] = "alice@example.com"
+    assert [x.id for x in d.comments.filter(author="alice@example.com")] == [c.id]
+
+
 def test_iter_comments():
     d = open_doc()
     d.create_comment("first")
