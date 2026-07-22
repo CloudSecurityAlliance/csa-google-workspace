@@ -138,3 +138,18 @@ def test_content_write_live():
         assert s.values("Sheet1!A1:B1") == [["hello", "world"]]
         s.clear("Sheet1!A1:B1")
         assert s.values("Sheet1!A1:B1") == []
+
+
+def test_suggestions_read_live():
+    doc_id = os.environ.get("CSA_GW_SUGGESTIONS_DOC")
+    if not doc_id:
+        pytest.skip("set CSA_GW_SUGGESTIONS_DOC to a Doc id that has suggesting-mode edits")
+    from csa_google_workspace import Doc
+    ws = _ws()
+    d = ws.open(doc_id)
+    assert isinstance(d, Doc)
+    sugg = d.suggestions
+    assert isinstance(sugg, list) and all(s.kind in ("insertion", "deletion") for s in sugg)
+    # accepted vs rejected previews should differ when suggestions exist
+    if sugg:
+        assert d.as_text(suggestions="accepted") != d.as_text(suggestions="rejected")
