@@ -28,3 +28,10 @@ def test_as_text_quotes_tab_with_spaces():
     s = _sheet([("Q1 Budget", 0)])   # values fixture keyed by the quoted range
     # should not raise / should read via the quoted range
     assert s.as_text() == "a\tb"
+
+
+def test_quote_tab_escapes_embedded_apostrophe():
+    s = _sheet([("Sheet1", 0)])
+    assert s._quote_tab("O'Brien") == "'O''Brien'"
+    assert s._quote_tab("Q1 Budget") == "'Q1 Budget'"
+    assert s._quote_tab("Sheet1") == "Sheet1"

@@ -20,7 +20,9 @@ class Sheet(Document):
         return self._backend.get_values(self.id, a1_range)
 
     def _quote_tab(self, title: str) -> str:
-        return title if title.replace("_", "").isalnum() else f"'{title}'"
+        if title.replace("_", "").isalnum():
+            return title
+        return "'" + title.replace("'", "''") + "'"
 
     def _gid(self, title=None):
         sheets = self._backend.get_spreadsheet(self.id).get("sheets", [])
