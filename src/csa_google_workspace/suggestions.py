@@ -21,14 +21,18 @@ def _collect(el: dict, groups) -> None:
             tr = pe.get("textRun")
             if not tr:
                 continue
-            ins = tr.get("suggestedInsertionIds")
-            dele = tr.get("suggestedDeletionIds")
-            if not (ins or dele):
-                continue
-            sid = (ins or dele)[0]
-            kind = "insertion" if ins else "deletion"
-            g = groups.setdefault(sid, {"kind": kind, "text": []})
-            g["text"].append(tr.get("content", ""))
+            content = tr.get("content", "")
+            # A run may be insertion, deletion, or BOTH (a replacement uses one suggestion
+            # id for a deletion run + an insertion run). Group by (id, kind) so each aspect
+            # is a faithful Suggestion, rather than collapsing a replacement into one.
+            for kind, key in (("insertion", "suggestedInsertionIds"),
+                              ("deletion", "suggestedDeletionIds")):
+                ids = tr.get(key)
+                if ids:
+                    sid = ids[0]
+                    g = groups.setdefault((sid, kind),
+                                          {"suggestion_id": sid, "kind": kind, "text": []})
+                    g["text"].append(content)
         return
     table = el.get("table")
     if table:
@@ -39,8 +43,8 @@ def _collect(el: dict, groups) -> None:
 
 
 def extract_suggestions(document: dict) -> list[Suggestion]:
-    groups: OrderedDict[str, dict] = OrderedDict()
+    groups: OrderedDict[tuple[str, str], dict] = OrderedDict()
     for el in document.get("body", {}).get("content", []):
         _collect(el, groups)
-    return [Suggestion(suggestion_id=sid, kind=g["kind"], text="".join(g["text"]))
-            for sid, g in groups.items()]
+    return [Suggestion(suggestion_id=g["suggestion_id"], kind=g["kind"], text="".join(g["text"]))
+            for g in groups.values()]
