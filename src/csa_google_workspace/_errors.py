@@ -44,14 +44,17 @@ def _retry_after(err: HttpError):
     if value is None:
         return None
     try:
-        return int(value)
+        seconds = int(value)
     except (TypeError, ValueError):
         return None
+    return seconds if seconds >= 0 else None   # ignore a negative/garbage hint (time.sleep rejects it)
 
 
 def translate_http_error(err: HttpError) -> exc.CsaWorkspaceError:
     status = int(getattr(err.resp, "status", 0) or 0)
     reason, message = _reason_and_message(err)
+    if status == 401:
+        return exc.AuthError(message or "authentication failed")
     if status == 404:
         return exc.NotFoundError(message or "not found")
     if status == 403:
