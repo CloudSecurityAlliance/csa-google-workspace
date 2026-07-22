@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
 from .backend import ApiBackend, Backend
 from .base import Document, subclass_for_mime
+
+if TYPE_CHECKING:
+    from google.auth.credentials import Credentials
 
 _ID_IN_URL = re.compile(r"/d/([a-zA-Z0-9_-]+)")
 
@@ -30,7 +34,7 @@ class Workspace:
         return self.open(url)
 
     @classmethod
-    def from_credentials(cls, credentials, read_only: bool = False) -> Workspace:
+    def from_credentials(cls, credentials: Credentials, read_only: bool = False) -> Workspace:
         """Bring your own credentials: wrap any google.auth Credentials
         (a user's OAuth credentials, or a service account's) into a Workspace."""
         from ._services import ServiceRegistry
