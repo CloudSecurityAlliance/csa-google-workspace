@@ -49,9 +49,10 @@ def load_credentials(client_secrets: str, token_path: str, read_only: bool) -> C
             raise AuthError(f"could not load or refresh cached credentials: {e}") from e
     else:
         creds = InstalledAppFlow.from_client_secrets_file(client_secrets, required).run_local_server(port=0)
-    token_dir = os.path.dirname(token_path) or "."
-    os.makedirs(token_dir, exist_ok=True)
-    os.chmod(token_dir, 0o700)
+    token_dir = os.path.dirname(token_path)
+    if token_dir:
+        os.makedirs(token_dir, exist_ok=True)
+        os.chmod(token_dir, 0o700)
     fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(creds.to_json())

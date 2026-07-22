@@ -39,6 +39,8 @@ class Sheet(Document):
         return "\n".join("\t".join(str(c) for c in row) for row in rows)
 
     def create_comment(self, text: str, cell: str | None = None):
+        self._require_writable()
+        self._cell_map_cache = None
         if cell is None:
             return super().create_comment(text)
         gid = self._gid()
@@ -76,12 +78,15 @@ class Sheet(Document):
 
     def update(self, a1_range: str, values: list, value_input_option: str = "RAW") -> None:
         self._require_writable()
+        self._cell_map_cache = None
         self._backend.sheets_values_update(self.id, a1_range, values, value_input_option)
 
     def clear(self, a1_range: str) -> None:
         self._require_writable()
+        self._cell_map_cache = None
         self._backend.sheets_values_clear(self.id, a1_range)
 
     def batch_update(self, requests: list) -> dict:
         self._require_writable()
+        self._cell_map_cache = None
         return self._backend.sheets_batch_update(self.id, requests)

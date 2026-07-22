@@ -80,3 +80,35 @@ def test_call_raises_typed_after_nonretryable():
         raise _http_error(404, "notFound", "gone")
     with pytest.raises(exc.NotFoundError):
         _errors.call(boom, _sleep=lambda s: None)
+
+
+def test_call_non_idempotent_does_not_retry_5xx():
+    calls = {"n": 0}
+    def flaky_503():
+        calls["n"] += 1
+        raise _http_error(503, "backendError", "temporary")
+    with pytest.raises(exc.ApiError):
+        _errors.call(flaky_503, idempotent=False, _sleep=lambda s: None)
+    assert calls["n"] == 1
+
+
+def test_call_idempotent_still_retries_5xx():
+    calls = {"n": 0}
+    def flaky_503():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise _http_error(503, "backendError", "temporary")
+        return {"ok": True}
+    assert _errors.call(flaky_503, _sleep=lambda s: None) == {"ok": True}
+    assert calls["n"] == 3
+
+
+def test_call_non_idempotent_still_retries_429():
+    calls = {"n": 0}
+    def flaky_429():
+        calls["n"] += 1
+        if calls["n"] < 2:
+            raise _http_error(429, "rateLimitExceeded", "slow down")
+        return {"ok": True}
+    assert _errors.call(flaky_429, idempotent=False, _sleep=lambda s: None) == {"ok": True}
+    assert calls["n"] == 2

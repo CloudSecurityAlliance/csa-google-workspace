@@ -1,3 +1,4 @@
+import pytest
 from csa_google_workspace import Workspace
 from csa_google_workspace.backend import FakeBackend
 
@@ -26,3 +27,14 @@ def test_as_text_joins_paragraphs_and_table_cells():
 def test_paragraphs_are_split():
     ps = doc().paragraphs
     assert ps[0] == "Hello world" and ps[1] == "Second para"
+
+
+def test_as_text_bad_suggestions_value_raises_value_error():
+    with pytest.raises(ValueError):
+        doc().as_text(suggestions="bogus")
+
+
+def test_as_text_valid_suggestions_values_still_work():
+    d = doc()
+    assert "Hello world" in d.as_text()
+    assert "Hello world" in d.as_text(suggestions="accepted")

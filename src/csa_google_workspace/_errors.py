@@ -54,8 +54,10 @@ def translate_http_error(err: HttpError) -> exc.CsaWorkspaceError:
     return exc.ApiError(status=status, reason=reason, message=message or str(err))
 
 
-def call(fn, *args, _sleep=time.sleep, **kwargs):
-    """Call fn(*args, **kwargs), translating HttpError. Retry 429/5xx with backoff."""
+def call(fn, *args, idempotent: bool = True, _sleep=time.sleep, **kwargs):
+    """Call fn(*args, **kwargs), translating HttpError. Always retries 429; retries 5xx
+    with backoff only when `idempotent` is True (non-idempotent writes must not be retried
+    on 5xx, since the mutation may have already succeeded server-side)."""
     attempt = 0
     while True:
         attempt += 1
@@ -63,7 +65,8 @@ def call(fn, *args, _sleep=time.sleep, **kwargs):
             return fn(*args, **kwargs)
         except HttpError as err:
             status = int(getattr(err.resp, "status", 0) or 0)
-            if status in _RETRYABLE and attempt < _MAX_ATTEMPTS:
+            retryable = status == 429 or (idempotent and status in _RETRYABLE)
+            if retryable and attempt < _MAX_ATTEMPTS:
                 _sleep(0.5 * (2 ** (attempt - 1)))
                 continue
             raise translate_http_error(err) from err

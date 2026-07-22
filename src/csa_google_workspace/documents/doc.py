@@ -11,6 +11,8 @@ class Doc(Document):
     offered — no API endpoint exists."""
 
     def as_text(self, suggestions: str | None = None) -> str:
+        if suggestions is not None and suggestions not in _VIEW:
+            raise ValueError(f"suggestions must be one of {sorted(_VIEW)} or None")
         mode = _VIEW[suggestions] if suggestions else None
         return _content.doc_text(self._backend.get_document(self.id, mode))
 
