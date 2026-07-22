@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-22 — Split the interactive OAuth suite out (`tests/oauth/`)
+
+The browser-login tests are now their own suite, separate from the API-integration tests,
+because they need a human at a browser and touch the very sensitive cached OAuth token.
+
+- Moved `tests/integration/test_oauth_live.py` → **`tests/oauth/test_oauth_flow.py`**.
+- Own opt-in gate **`CSA_GW_OAUTH=1`** (distinct from `CSA_GW_INTEGRATION`), so it never runs
+  by accident and is clearly the interactive/sensitive tier. Run: `CSA_GW_OAUTH=1
+  CSA_GW_CLIENT_SECRETS=… pytest tests/oauth/`.
+- Three tiers now: unit (offline, gates CI) · integration (real API) · oauth (interactive).
+
 ## 2026-07-22 — Live-suite coverage for Tier 3 + a dedicated OAuth e2e suite
 
 Test-only; all gated behind `CSA_GW_INTEGRATION` (no runtime change):

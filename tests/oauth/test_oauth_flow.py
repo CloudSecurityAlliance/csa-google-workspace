@@ -1,15 +1,20 @@
-"""End-to-end OAuth tests — require a REAL interactive login.
+"""Interactive OAuth end-to-end suite — SEPARATE from the rest of the tests on purpose.
 
-The most opt-in slice of the suite: these drive `auth.py`'s real login, token caching,
-and token-file permissions against Google — the paths no FakeBackend test can reach. The
-FIRST run opens a browser for consent; later runs reuse the cached token (the default path
-`~/.csa_google_workspace/token.json`, shared with the rest of the live suite). Because the
-writable login runs first, the read-only test reuses that token and does NOT prompt again.
+This is the only suite that needs a **human at a browser** (to grant consent on first run)
+and that reads/writes a **very sensitive cached credential** — the OAuth token at
+`~/.csa_google_workspace/token.json`, which holds a refresh token. It therefore has its own
+opt-in gate, `CSA_GW_OAUTH=1` (distinct from the API-integration suite's
+`CSA_GW_INTEGRATION`), and lives in its own directory so it never runs by accident.
 
-Gated by CSA_GW_INTEGRATION=1 and CSA_GW_CLIENT_SECRETS.
+It drives `auth.py`'s real login, token caching, and token-file permissions against Google
+— the paths no FakeBackend test can reach. The FIRST run opens a browser for consent; later
+runs reuse the cached token. The writable login runs first, so the read-only test reuses
+that token and does NOT prompt a second time.
 
-    CSA_GW_INTEGRATION=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json \
-        pytest tests/integration/test_oauth_live.py -v
+    CSA_GW_OAUTH=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json \
+        pytest tests/oauth -v
+
+Never commit `client_secret.json` or `token*.json` — both are gitignored.
 """
 import os
 import stat
@@ -17,8 +22,8 @@ import stat
 import pytest
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("CSA_GW_INTEGRATION") != "1",
-    reason="set CSA_GW_INTEGRATION=1 (and CSA_GW_CLIENT_SECRETS) to run live OAuth tests",
+    os.environ.get("CSA_GW_OAUTH") != "1",
+    reason="set CSA_GW_OAUTH=1 (and CSA_GW_CLIENT_SECRETS) to run the interactive OAuth suite",
 )
 
 DOC = "application/vnd.google-apps.document"

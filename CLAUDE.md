@@ -49,9 +49,18 @@ This is **not** a TypeScript MCP server and **not** comments-only — earlier dr
 ```bash
 pip install -e ".[dev]"        # install (src/ layout, Python >=3.10)
 pytest -q                       # unit suite — no network, no credentials (uses FakeBackend)
-# Live integration suite (real Google; opt-in only):
+ruff check src tests && mypy    # lint + type-check (the CI `lint` job)
+
+# Live API suite (real Google; opt-in). Needs a cached token or a first-run browser login:
 CSA_GW_INTEGRATION=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tests/integration/
+
+# Interactive OAuth suite (SEPARATE — needs a human + touches the sensitive cached token):
+CSA_GW_OAUTH=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tests/oauth/
 ```
+
+Three test tiers: **unit** (`tests/`, offline, gates CI) · **integration** (`tests/integration/`,
+real Google API, `CSA_GW_INTEGRATION=1`) · **oauth** (`tests/oauth/`, interactive browser
+login + token-file handling, `CSA_GW_OAUTH=1`). The latter two skip unless opted in.
 
 ## Working in this repo
 

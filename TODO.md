@@ -109,13 +109,18 @@ they're the right release-readiness priorities.
 
 ## Integration / live testing
 
-The offline unit suite (169 tests, `FakeBackend`) gates every PR. The **gated live suite**
-(`tests/integration/`) verifies against real Google and now covers the full surface —
-including the Tier 3 ops and a dedicated **OAuth end-to-end** file (`test_oauth_live.py`:
-real login, token-file permissions, `read_only` contract). Run it manually:
+Three tiers:
+
+- **unit** — `tests/`, offline (`FakeBackend`), 169 tests; gates every PR.
+- **integration** — `tests/integration/`, real Google API, opt-in via `CSA_GW_INTEGRATION=1`
+  (needs a cached token or a first-run browser login). Covers the full surface incl. Tier 3.
+- **oauth** — `tests/oauth/`, the **interactive browser-login** suite (real `from_oauth`,
+  token-file permissions, `read_only` contract). **Separate** because it needs a human at a
+  browser and touches the very sensitive cached token; own gate `CSA_GW_OAUTH=1`.
 
 ```
 CSA_GW_INTEGRATION=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tests/integration/
+CSA_GW_OAUTH=1       CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tests/oauth/
 ```
 
 - [ ] **Optional: a manual `workflow_dispatch` CI job** running the live suite with a stored
