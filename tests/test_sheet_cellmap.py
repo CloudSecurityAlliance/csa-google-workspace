@@ -74,3 +74,31 @@ def test_cell_map_degrades_on_malformed_comment_xml():
     got = sheet.comments.all()
     assert [x.id for x in got] == [c["id"]]
     assert got[0].location is None
+
+
+def test_cell_map_degrade_records_a_warning(caplog):
+    """Spec §8: a degrade must be a *recorded warning*, not silence — so callers can tell
+    'cell mapping unavailable' (export failed/malformed) apart from a genuine no-match."""
+    import logging
+    b = FakeBackend(META)
+    c = b.create_comment("s", "check West")
+    b._exports[("s", XLSX)] = _malformed_xlsx_export()
+    sheet = Workspace(b).open("s")
+    with caplog.at_level(logging.WARNING, logger="csa_google_workspace.documents.sheet"):
+        assert sheet.comments.get(c["id"]).location is None
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings, "degrade must record a WARNING"
+    assert "cell mapping unavailable" in warnings[0].getMessage()
+
+
+def test_genuine_no_match_does_not_warn(caplog):
+    """A valid export with no matching comment is a real no-match, not a failure: location
+    is None but NO warning is recorded (else every unmapped comment would spam warnings)."""
+    import logging
+    b = FakeBackend(META)
+    c = b.create_comment("s", "unmapped")
+    b._exports[("s", XLSX)] = _xlsx("B11", "Someone Else", "different", "2026-01-01T00:00:00.00")
+    sheet = Workspace(b).open("s")
+    with caplog.at_level(logging.WARNING, logger="csa_google_workspace.documents.sheet"):
+        assert sheet.comments.get(c["id"]).location is None
+    assert not [r for r in caplog.records if r.levelno == logging.WARNING]

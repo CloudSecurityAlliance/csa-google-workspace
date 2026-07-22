@@ -188,10 +188,9 @@ class ApiBackend:
         self._services = services
 
     def get_file_metadata(self, file_id: str) -> dict:
-        return (self._services.drive.files()
-                .get(fileId=file_id, fields="id,name,mimeType,webViewLink",
-                     supportsAllDrives=True)
-                .execute())
+        return _errors.call(self._services.drive.files()
+                            .get(fileId=file_id, fields="id,name,mimeType,webViewLink",
+                                 supportsAllDrives=True).execute)
 
     def accept_suggestion(self, file_id: str, suggestion_id: str) -> None:
         raise exc.UnsupportedOperation(
