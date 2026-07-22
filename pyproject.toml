@@ -20,6 +20,10 @@ dev = ["pytest>=8.0"]
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# Ship the PEP 561 marker so downstream mypy/pyright consume the inline type hints.
+[tool.setuptools.package-data]
+csa_google_workspace = ["py.typed"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
