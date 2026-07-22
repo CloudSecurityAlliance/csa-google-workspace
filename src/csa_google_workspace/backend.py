@@ -23,7 +23,7 @@ class Backend(Protocol):
     def delete_comment(self, file_id: str, comment_id: str) -> None: ...
     def delete_reply(self, file_id: str, comment_id: str, reply_id: str) -> None: ...
     def export_file(self, file_id: str, mime_type: str) -> bytes: ...
-    def get_document(self, file_id: str) -> dict: ...
+    def get_document(self, file_id: str, suggestions_view_mode: str | None = None) -> dict: ...
     def get_spreadsheet(self, file_id: str) -> dict: ...
     def get_values(self, file_id: str, a1_range: str) -> list: ...
     def get_presentation(self, file_id: str) -> dict: ...
@@ -143,7 +143,10 @@ class FakeBackend:
     def export_file(self, file_id, mime_type):
         return self._fixture(self._exports, (file_id, mime_type), "export")
 
-    def get_document(self, file_id):
+    def get_document(self, file_id, suggestions_view_mode=None):
+        key = (file_id, suggestions_view_mode)
+        if key in self._documents:
+            return copy.deepcopy(self._documents[key])
         return self._fixture(self._documents, file_id, "document")
 
     def get_spreadsheet(self, file_id):
@@ -263,8 +266,11 @@ class ApiBackend:
         return _errors.call(self._services.drive.files()
                             .export(fileId=file_id, mimeType=mime_type).execute)
 
-    def get_document(self, file_id):
-        return _errors.call(self._services.docs.documents().get(documentId=file_id).execute)
+    def get_document(self, file_id, suggestions_view_mode=None):
+        kw = {"documentId": file_id}
+        if suggestions_view_mode:
+            kw["suggestionsViewMode"] = suggestions_view_mode
+        return _errors.call(self._services.docs.documents().get(**kw).execute)
 
     def get_spreadsheet(self, file_id):
         return _errors.call(self._services.sheets.spreadsheets()
