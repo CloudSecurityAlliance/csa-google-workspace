@@ -10,7 +10,39 @@ when picked up, follows the plan-then-execute rhythm (spec/plan under
 `docs/superpowers/`, then TDD via `FakeBackend`). The dense per-phase execution ledger
 lives in `.superpowers/sdd/progress.md`; this file is the human-facing view.
 
+## Near-term objective: audit → cleanup → PyPI
+
+The agreed next milestone is to **audit the library, clean up what the audit finds, and
+publish it to PyPI.** The correctness findings in Tier 0 below and the release-readiness
+work in Tier 1 are the substance of that milestone; Tier 2 tooling supports it. Treat
+these three tiers as the "1.0-on-PyPI" work-package.
+
+## Tier 0 — audit findings (correctness; do first)
+
+Confirmed by an external review (2026-07-21) and re-verified against the code:
+
+- [ ] **`Workspace.open()` leaks a raw `HttpError`.** `ApiBackend.get_file_metadata`
+  (`backend.py:190`) is the *only* data method that calls `.execute()` without
+  `_errors.call(...)`, so the first call a consumer makes raises a raw
+  `googleapiclient.errors.HttpError` on a missing/forbidden/service-disabled file
+  instead of the typed `NotFoundError`/`PermissionError`/`ServiceDisabledError` the spec
+  promises. **Fix:** wrap in `_errors.call`, **and** add an `ApiBackend`-level test that
+  feeds a stub service raising `HttpError` and asserts typed translation — no
+  `FakeBackend` test can catch this class of bug, because the fake raises typed errors
+  directly (the one blind spot of the fake/real seam).
+- [ ] **Cell-map degrade is spec-noncompliant (no recorded warning).** The spec
+  (`docs/superpowers/specs/2026-07-20-csa-google-workspace-design.md:334`) requires
+  `_cellmap` to degrade to `location=None` **plus a recorded warning**. `sheet.py:63`
+  does the `location=None` half but records nothing, so export-cap-exceeded,
+  access-denied, malformed XLSX, and genuine no-match are indistinguishable to callers.
+  Shares a root cause with the tracked "10 MB export cap silently degrades" item:
+  **there is no logging/warnings story.** **Fix (shared, minimal):** adopt stdlib
+  `logging` + `warnings.warn`; closes both. Resist anything heavier.
+
 ## Tier 1 — make the "embeddable, typed" promise real (small, high leverage)
+
+Both items below were independently flagged by the same external review — good signal
+they're the right release-readiness priorities.
 
 - [ ] **`py.typed` marker (PEP 561).** The source is fully type-hinted, but there's no
   marker + `package-data` entry, so a downstream MCP/plugin author's `mypy`/`pyright`
@@ -68,7 +100,8 @@ These are recorded design decisions, **not bugs**:
   multi-reviewer sessions where a self-only-invalidated cache goes stale). An *opt-in* /
   request-scoped cache is the biggest runtime win for embedded review sessions.
 - [ ] **10 MB XLSX export cap** — large sheets silently degrade the cell-map; accepted
-  today (no logging infra to surface it).
+  today (no logging infra to surface it). → Closed by the shared logging/warnings story
+  in **Tier 0** (cell-map degrade); once that lands, this stops being silent.
 - [ ] **Accept/reject suggestions & true cell-anchored comment creation** — API-impossible
   (proven by probe); reserved for a future `PlaywrightBackend`. `ApiBackend` raises
   `UnsupportedOperation`.
