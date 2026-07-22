@@ -113,3 +113,48 @@ def test_corrupt_cached_token_raises_auth_error(tmp_path, monkeypatch):
 
     with pytest.raises(auth.AuthError):
         auth.load_credentials("client.json", str(token), read_only=False)
+
+
+# --- #52 interim token.json hardening -----------------------------------------
+
+def test_existing_token_file_mode_is_enforced(tmp_path, monkeypatch):
+    """#17: O_TRUNC keeps a pre-existing file's mode, so fchmod must re-tighten to 0o600."""
+    token = tmp_path / "token.json"
+    token.write_text("old")
+    token.chmod(0o644)                                       # pre-existing, world-readable
+    _patch_from_file(monkeypatch, FakeCreds(valid=False, expired=False, refresh_token=None))
+    _patch_flow(monkeypatch, FakeCreds(valid=True))          # falls through to (re)write
+    auth.load_credentials("client.json", str(token), read_only=False)
+    assert stat.S_IMODE(os.stat(token).st_mode) == 0o600
+
+
+def test_preexisting_token_dir_is_not_chmodded(tmp_path, monkeypatch):
+    """#4: a caller-supplied existing dir must not have its mode mutated as a side effect."""
+    d = tmp_path / "caller-dir"
+    d.mkdir()
+    d.chmod(0o755)
+    token = d / "token.json"
+    _patch_flow(monkeypatch, FakeCreds(valid=True))
+    auth.load_credentials("client.json", str(token), read_only=False)
+    assert stat.S_IMODE(os.stat(d).st_mode) == 0o755         # unchanged, not forced to 0o700
+    assert stat.S_IMODE(os.stat(token).st_mode) == 0o600     # the file we created is hardened
+
+
+def test_symlinked_token_path_is_refused(tmp_path, monkeypatch):
+    """#17: O_NOFOLLOW must refuse to write through a symlink at the token path."""
+    link = tmp_path / "token.json"
+    link.symlink_to(tmp_path / "nonexistent-target.json")    # dangling -> not a valid cache, reaches write
+    _patch_flow(monkeypatch, FakeCreds(valid=True))
+    with pytest.raises(OSError):
+        auth.load_credentials("client.json", str(link), read_only=False)
+
+
+def test_corrupt_token_error_does_not_leak_cause(tmp_path, monkeypatch):
+    """#19: the underlying auth-library error string must not be interpolated into AuthError."""
+    token = tmp_path / "token.json"
+    token.write_text("{}")
+    _patch_from_file(monkeypatch, ValueError("SENSITIVE token material"))
+    with pytest.raises(auth.AuthError) as ei:
+        auth.load_credentials("client.json", str(token), read_only=False)
+    assert "SENSITIVE token material" not in str(ei.value)   # not in the message
+    assert ei.value.__cause__ is not None                    # but preserved via `from e`

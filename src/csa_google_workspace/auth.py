@@ -37,7 +37,13 @@ def load_credentials(client_secrets: str, token_path: str, read_only: bool) -> C
         try:
             creds = Credentials.from_authorized_user_file(token_path)
         except (ValueError, GoogleAuthError) as e:
-            raise AuthError(f"could not load or refresh cached credentials: {e}") from e
+            # Generic message: don't interpolate the cause (may echo token material). The
+            # original is preserved via `from e` for debugging (#19).
+            raise AuthError("could not load cached credentials") from e
+        # (#13) A cached read-write token satisfies a required read-only scope set, so
+        # read_only=True reuses it rather than forcing an interactive re-consent — deliberate,
+        # to keep headless refresh working. read_only still blocks writes client-side; for a
+        # scope-level read-only guarantee use a separate token path or from_credentials.
         if needs_reconsent(list(creds.scopes or []), required):
             creds = None  # cached token lacks the scopes we now need → re-consent
     if creds and creds.valid:
@@ -46,14 +52,18 @@ def load_credentials(client_secrets: str, token_path: str, read_only: bool) -> C
         try:
             creds.refresh(Request())
         except (ValueError, GoogleAuthError) as e:
-            raise AuthError(f"could not load or refresh cached credentials: {e}") from e
+            raise AuthError("could not refresh cached credentials") from e
     else:
         creds = InstalledAppFlow.from_client_secrets_file(client_secrets, required).run_local_server(port=0)
     token_dir = os.path.dirname(token_path)
-    if token_dir:
+    if token_dir and not os.path.isdir(token_dir):
         os.makedirs(token_dir, exist_ok=True)
-        os.chmod(token_dir, 0o700)
-    fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.chmod(token_dir, 0o700)          # only harden a dir we created; don't mutate a caller's (#4)
+    # O_NOFOLLOW refuses a symlink at token_path (symlink/TOCTOU attack); fchmod enforces
+    # 0o600 even when the file already existed, since O_TRUNC keeps a file's prior mode (#17).
+    fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
     with os.fdopen(fd, "w") as f:
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
         f.write(creds.to_json())
     return creds
