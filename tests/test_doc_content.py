@@ -1,4 +1,5 @@
 import pytest
+
 from csa_google_workspace import Workspace
 from csa_google_workspace.backend import FakeBackend
 

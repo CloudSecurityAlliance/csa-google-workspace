@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from csa_google_workspace.comments import Author, Reply, Comment, parse_time
+
+from csa_google_workspace.comments import Comment, Reply, parse_time
 
 FRESH = {  # never-resolved comment: no `resolved` key, no author email
     "id": "c1", "content": "hi", "htmlContent": "hi", "deleted": False,

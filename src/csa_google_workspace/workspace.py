@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .backend import Backend, ApiBackend
+from .backend import ApiBackend, Backend
 from .base import Document, subclass_for_mime
 
 _ID_IN_URL = re.compile(r"/d/([a-zA-Z0-9_-]+)")
@@ -30,7 +30,7 @@ class Workspace:
         return self.open(url)
 
     @classmethod
-    def from_credentials(cls, credentials, read_only: bool = False) -> "Workspace":
+    def from_credentials(cls, credentials, read_only: bool = False) -> Workspace:
         """Bring your own credentials: wrap any google.auth Credentials
         (a user's OAuth credentials, or a service account's) into a Workspace."""
         from ._services import ServiceRegistry
@@ -39,7 +39,7 @@ class Workspace:
     @classmethod
     def from_oauth(cls, client_secrets: str,
                    token_path: str = "~/.csa_google_workspace/token.json",
-                   read_only: bool = False) -> "Workspace":
+                   read_only: bool = False) -> Workspace:
         from .auth import load_credentials
         creds = load_credentials(client_secrets, token_path, read_only)
         return cls.from_credentials(creds, read_only=read_only)

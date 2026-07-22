@@ -5,8 +5,9 @@ text inside it is attacker-controllable, so we harden against XXE / billion-laug
 import io
 import re
 import zipfile
-import defusedxml.ElementTree as ET
 from collections import defaultdict
+
+import defusedxml.ElementTree as ET
 
 from .comments import Location
 

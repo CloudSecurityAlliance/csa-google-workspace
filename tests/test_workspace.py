@@ -1,7 +1,8 @@
 import pytest
-from csa_google_workspace import Workspace, Doc, Sheet, Slides
-from csa_google_workspace.workspace import parse_file_id
+
+from csa_google_workspace import Doc, Sheet, Slides, Workspace
 from csa_google_workspace.backend import FakeBackend
+from csa_google_workspace.workspace import parse_file_id
 
 DOC = "application/vnd.google-apps.document"
 SHEET = "application/vnd.google-apps.spreadsheet"

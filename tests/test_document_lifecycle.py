@@ -1,5 +1,8 @@
 """Test Document base functionality: reload(), export(), and related."""
-from csa_google_workspace import Workspace, exceptions as exc
+import pytest
+
+from csa_google_workspace import Workspace
+from csa_google_workspace import exceptions as exc
 from csa_google_workspace.backend import FakeBackend
 
 DOC = "application/vnd.google-apps.document"
@@ -43,11 +46,8 @@ def test_export_missing_raises_not_found():
     )
     ws = Workspace(backend)
     doc = ws.open("f")
-    try:
+    with pytest.raises(exc.NotFoundError):
         doc.export("application/pdf")
-        assert False, "should have raised NotFoundError"
-    except exc.NotFoundError:
-        pass  # expected
 
 
 def test_reload_doc_base_does_nothing():

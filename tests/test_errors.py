@@ -1,5 +1,7 @@
 import pytest
-from csa_google_workspace import _errors, exceptions as exc
+
+from csa_google_workspace import _errors
+from csa_google_workspace import exceptions as exc
 
 
 class FakeResp:
@@ -18,15 +20,17 @@ class FakeRespWithHeaders(dict):
 
 
 def _http_error(status, reason, message):
-    from googleapiclient.errors import HttpError
     import json
+
+    from googleapiclient.errors import HttpError
     content = json.dumps({"error": {"errors": [{"reason": reason}], "message": message}}).encode()
     return HttpError(FakeResp(status), content)
 
 
 def _http_error_with_headers(status, reason, message, headers=None):
-    from googleapiclient.errors import HttpError
     import json
+
+    from googleapiclient.errors import HttpError
     content = json.dumps({"error": {"errors": [{"reason": reason}], "message": message}}).encode()
     return HttpError(FakeRespWithHeaders(status, headers), content)
 
@@ -47,8 +51,9 @@ def test_translate_service_disabled():
 
 
 def _modern_details_http_error(reason, message, details_reason=None, metadata=None):
-    from googleapiclient.errors import HttpError
     import json
+
+    from googleapiclient.errors import HttpError
     body = {"error": {"code": 403, "status": "PERMISSION_DENIED", "message": message,
                        "errors": [{"reason": reason}]}}
     if details_reason:

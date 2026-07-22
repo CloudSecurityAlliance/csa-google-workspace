@@ -1,4 +1,6 @@
-import io, zipfile
+import io
+import zipfile
+
 from csa_google_workspace import Workspace
 from csa_google_workspace.backend import FakeBackend
 
@@ -21,7 +23,8 @@ def _xlsx(ref, author, text, dT):
 
 def _sheet_with_mapped_comment():
     b = FakeBackend(META)
-    c = b.create_comment("s", "check West")        # FakeBackend sets author "Test User", createdTime 2026-01-01T00:00:00Z
+    # FakeBackend sets author "Test User", createdTime 2026-01-01T00:00:00Z
+    c = b.create_comment("s", "check West")
     b._exports[("s", XLSX)] = _xlsx("B11", "Test User", "check West", "2026-01-01T00:00:00.00")
     return Workspace(b).open("s"), c["id"]
 
