@@ -1,4 +1,5 @@
 import logging
+import re
 
 from .. import _cellmap
 from ..base import Document
@@ -24,8 +25,12 @@ class Sheet(Document):
         return self._backend.get_values(self.id, a1_range)
 
     def _quote_tab(self, title: str) -> str:
-        import re
-        if title.replace("_", "").isalnum() and not re.fullmatch(r"[A-Za-z]{1,3}\d+", title):
+        # In A1 notation a tab name may go unquoted only if it reads as a plain
+        # identifier (leading ASCII letter/underscore, then ASCII word chars) AND is
+        # not itself a cell reference like "A1". Everything else — all-digit ("2024"),
+        # leading-digit, spaces, non-ASCII — must be single-quoted (with '' escaping),
+        # or Sheets rejects the range with a 400.
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", title) and not re.fullmatch(r"[A-Za-z]{1,3}\d+", title):
             return title
         return "'" + title.replace("'", "''") + "'"
 
