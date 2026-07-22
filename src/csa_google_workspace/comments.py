@@ -8,6 +8,14 @@ from datetime import datetime, timezone
 from .exceptions import ReadOnlyError
 
 
+@dataclass
+class Location:
+    cell: str
+    row: int
+    col: int
+    tab: str | None = None
+
+
 def parse_time(s: str | None) -> datetime | None:
     if not s:
         return None
@@ -74,7 +82,7 @@ class Comment:
     html_content: str | None
     quoted_text: str | None
     anchor: str | None
-    location: object | None  # populated in the Sheets cell-mapping phase; None here
+    location: "Location | None"
     resolved: bool
     deleted: bool
     created_time: datetime | None
