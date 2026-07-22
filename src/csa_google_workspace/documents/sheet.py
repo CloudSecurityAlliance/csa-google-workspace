@@ -70,3 +70,15 @@ class Sheet(Document):
 
     def reload(self) -> None:
         self._cell_map_cache = None
+
+    def update(self, a1_range: str, values: list) -> None:
+        self._require_writable()
+        self._backend.sheets_values_update(self.id, a1_range, values)
+
+    def clear(self, a1_range: str) -> None:
+        self._require_writable()
+        self._backend.sheets_values_clear(self.id, a1_range)
+
+    def batch_update(self, requests: list) -> dict:
+        self._require_writable()
+        return self._backend.sheets_batch_update(self.id, requests)
