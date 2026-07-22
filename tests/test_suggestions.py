@@ -46,6 +46,18 @@ def test_get_document_falls_back_to_plain_key():
     assert b.get_document("d", "SUGGESTIONS_INLINE")["title"] == "plain"  # falls back to plain key
 
 
+def test_replacement_yields_separate_insertion_and_deletion():
+    # A replacement uses ONE suggestion id for a deletion run + an insertion run (audit #16).
+    # It must surface as two faithful suggestions, not one collapsed/mislabeled entry.
+    doc = _doc(_run("old text", dele=["s1"]), _run("new text", ins=["s1"]))
+    sugg = extract_suggestions(doc)
+    by_kind = {s.kind: s for s in sugg}
+    assert set(by_kind) == {"insertion", "deletion"}
+    assert all(s.suggestion_id == "s1" for s in sugg)
+    assert by_kind["deletion"].text == "old text"
+    assert by_kind["insertion"].text == "new text"
+
+
 def test_suggestion_inside_table_cell_is_found():
     doc = {"body": {"content": [
         {"table": {"tableRows": [{"tableCells": [
