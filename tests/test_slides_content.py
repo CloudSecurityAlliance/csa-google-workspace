@@ -44,6 +44,17 @@ def test_slide_notes():
     assert "speaker note here" in slide_deck.slides[0].notes
 
 
+def test_slide_shape_ids_lists_text_capable_shapes():
+    pres = {"slides": [{"pageElements": [
+        {"objectId": "box1", "shape": {"text": {"textElements": []}}},
+        {"objectId": "box2", "shape": {}},                      # empty text box still targetable
+        {"objectId": "img1", "image": {}},                      # not a shape -> excluded
+        {"line": {}},                                            # no objectId -> excluded
+    ]}]}
+    deck = Workspace(FakeBackend(META, presentations={"p": pres})).open("p")
+    assert deck.slides[0].shape_ids == ["box1", "box2"]
+
+
 def test_slide_text_recurses_into_tables_and_element_groups():
     slide = {"pageElements": [
         _shape("shape text\n"),

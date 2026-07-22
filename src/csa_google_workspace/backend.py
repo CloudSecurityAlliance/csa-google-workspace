@@ -30,6 +30,8 @@ class Backend(Protocol):
     def docs_batch_update(self, file_id: str, requests: list) -> dict: ...
     def sheets_values_update(self, file_id: str, a1_range: str, values: list,
                              value_input_option: str = "RAW") -> dict: ...
+    def sheets_values_append(self, file_id: str, a1_range: str, values: list,
+                             value_input_option: str = "RAW") -> dict: ...
     def sheets_values_clear(self, file_id: str, a1_range: str) -> dict: ...
     def sheets_batch_update(self, file_id: str, requests: list) -> dict: ...
     def slides_batch_update(self, file_id: str, requests: list) -> dict: ...
@@ -167,6 +169,11 @@ class FakeBackend:
         self._values[(file_id, a1_range)] = values
         return {}
 
+    def sheets_values_append(self, file_id, a1_range, values, value_input_option="RAW"):
+        self._writes.append((file_id, "sheets_values_append", a1_range, values, value_input_option))
+        self._values[(file_id, a1_range)] = self._values.get((file_id, a1_range), []) + values
+        return {}
+
     def sheets_values_clear(self, file_id, a1_range):
         self._writes.append((file_id, "sheets_values_clear", a1_range))
         self._values.pop((file_id, a1_range), None)
@@ -300,6 +307,13 @@ class ApiBackend:
         return _errors.call(self._services.sheets.spreadsheets().values().update(
             spreadsheetId=file_id, range=a1_range, valueInputOption=value_input_option,
             body={"values": values}).execute,
+            idempotent=False)
+
+    def sheets_values_append(self, file_id, a1_range, values, value_input_option="RAW"):
+        # append is NOT idempotent: a retried request would add the rows twice. Never retry on 5xx.
+        return _errors.call(self._services.sheets.spreadsheets().values().append(
+            spreadsheetId=file_id, range=a1_range, valueInputOption=value_input_option,
+            insertDataOption="INSERT_ROWS", body={"values": values}).execute,
             idempotent=False)
 
     def sheets_values_clear(self, file_id, a1_range):

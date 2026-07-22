@@ -34,9 +34,23 @@ def test_batch_update_records():
     assert ("p", "slides", [{"createShape": {}}]) in b._writes
 
 
+def test_insert_text_builds_shape_addressed_insertText():
+    p, b = slides()
+    p.insert_text("box1", "hello", index=3)
+    assert b._writes == [("p", "slides", [{"insertText": {
+        "objectId": "box1", "text": "hello", "insertionIndex": 3}}])]
+
+
+def test_insert_text_defaults_to_index_zero():
+    p, b = slides()
+    p.insert_text("box1", "hi")
+    assert b._writes[0][2][0]["insertText"]["insertionIndex"] == 0
+
+
 def test_writes_blocked_when_read_only():
     p, _ = slides(read_only=True)
-    for call in (lambda: p.replace_text("a", "b"), lambda: p.batch_update([{}])):
+    for call in (lambda: p.replace_text("a", "b"), lambda: p.batch_update([{}]),
+                 lambda: p.insert_text("box1", "x")):
         with pytest.raises(exc.ReadOnlyError):
             call()
 

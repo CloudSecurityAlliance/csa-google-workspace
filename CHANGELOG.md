@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-07-21 — Tier 3 API-surface additions
+
+Closed the remaining within-scope content-write gaps (all `read_only`-gated, TDD):
+
+- **Sheets `append_rows(a1_range, values, value_input_option="RAW")`** — `values.append`
+  with `INSERT_ROWS`. Non-idempotent, so it is never auto-retried on 5xx (a retry could
+  duplicate rows). Invalidates the cell-map cache like the other writes.
+- **`Sheet.as_text(tab=None)`** now renders **every** tab by default (each prefixed with a
+  `# <tab>` header when there's more than one), fixing silent first-tab-only truncation on
+  multi-tab sheets. `tab=` selects a single tab (no header); single-tab output is unchanged.
+- **Slides `insert_text(object_id, text, index=0)`** — per-shape text insertion, symmetric
+  to `Doc.insert_text` but shape-addressed. **`Slide.shape_ids`** lists the text-capable
+  shape objectIds to target. (A fuller shape-CRUD model stays out of scope; `batch_update`
+  remains the escape hatch.)
+
 ## 2026-07-21 — Dev tooling: ruff + mypy + coverage gates
 
 Formalized the quality bar as enforced CI gates (no runtime/API change):
