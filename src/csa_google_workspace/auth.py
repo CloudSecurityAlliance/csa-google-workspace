@@ -18,7 +18,15 @@ def scopes_for(read_only: bool) -> list[str]:
 
 
 def needs_reconsent(granted: list[str], required: list[str]) -> bool:
-    return not set(required).issubset(set(granted or []))
+    granted_set = set(granted or [])
+    for scope in required:
+        if scope in granted_set:
+            continue
+        base = scope[: -len(".readonly")] if scope.endswith(".readonly") else None
+        if base and base in granted_set:
+            continue  # a granted RW scope satisfies a required readonly scope
+        return True
+    return False
 
 
 def load_credentials(client_secrets: str, token_path: str, read_only: bool) -> Credentials:

@@ -55,3 +55,22 @@ def test_cell_map_retries_after_transient_failure():
     b._exports[("s", XLSX)] = _xlsx("B11", "Test User", "check West", "2026-01-01T00:00:00.00")
     # a later access must retry (not serve a memoized empty map) and now resolve the cell
     assert sheet.comments.get(c["id"]).location.cell == "B11"
+
+
+def _malformed_xlsx_export():
+    """A valid zip whose threadedComment XML is malformed -> defusedxml/ElementTree ParseError."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("xl/threadedComments/threadedComment1.xml", b"<broken")
+    return buf.getvalue()
+
+
+def test_cell_map_degrades_on_malformed_comment_xml():
+    b = FakeBackend(META)
+    c = b.create_comment("s", "check West")
+    b._exports[("s", XLSX)] = _malformed_xlsx_export()
+    sheet = Workspace(b).open("s")
+    # malformed XML must not crash comment reads; location degrades to None
+    got = sheet.comments.all()
+    assert [x.id for x in got] == [c["id"]]
+    assert got[0].location is None

@@ -30,6 +30,40 @@ def test_translate_service_disabled():
     assert isinstance(e, exc.ServiceDisabledError)
 
 
+def _modern_details_http_error(reason, message, details_reason=None, metadata=None):
+    from googleapiclient.errors import HttpError
+    import json
+    body = {"error": {"code": 403, "status": "PERMISSION_DENIED", "message": message,
+                       "errors": [{"reason": reason}]}}
+    if details_reason:
+        body["error"]["details"] = [{
+            "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+            "reason": details_reason,
+            "metadata": metadata or {},
+        }]
+    content = json.dumps(body).encode()
+    return HttpError(FakeResp(403), content)
+
+
+def test_translate_service_disabled_modern_details_format():
+    err = _modern_details_http_error(
+        reason="insufficientPermissions",
+        message="The caller does not have permission",
+        details_reason="SERVICE_DISABLED",
+        metadata={"service": "docs.googleapis.com", "activationUrl": "https://console/enable"},
+    )
+    e = _errors.translate_http_error(err)
+    assert isinstance(e, exc.ServiceDisabledError)
+    assert e.service == "docs.googleapis.com"
+    assert e.activation_url == "https://console/enable"
+
+
+def test_translate_plain_403_is_access_error():
+    err = _modern_details_http_error(reason="insufficientPermissions", message="nope")
+    e = _errors.translate_http_error(err)
+    assert isinstance(e, exc.AccessError)
+
+
 def test_call_retries_then_succeeds():
     calls = {"n": 0}
     def flaky():
