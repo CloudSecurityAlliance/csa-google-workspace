@@ -1,7 +1,11 @@
+import logging
+
 from ..base import Document
 from .. import _cellmap
 
 _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+log = logging.getLogger(__name__)
 
 
 class Sheet(Document):
@@ -61,8 +65,13 @@ class Sheet(Document):
             roots = _cellmap.parse_xlsx_comments(xlsx)
             raw = self._backend.list_comments(self.id, include_deleted=False)
         except (CsaWorkspaceError, HttpError, zipfile.BadZipFile,
-                _ET.ParseError, DefusedXmlException):
-            return {}                      # transient/malformed/malicious: degrade WITHOUT memoizing -> retry next call
+                _ET.ParseError, DefusedXmlException) as e:
+            # transient/malformed/malicious/export-cap: degrade to location=None WITHOUT
+            # memoizing (so a later call retries), and record why so callers can tell this
+            # apart from a genuine no-match (spec §8: location=None + a recorded warning).
+            log.warning("cell mapping unavailable for sheet %s (%s: %s); "
+                        "comments will have location=None", self.id, type(e).__name__, e)
+            return {}
         comments = [Comment.from_api(d) for d in raw]
         self._cell_map_cache = _cellmap.match_locations(comments, roots)   # pure; a bug here propagates
         return self._cell_map_cache
