@@ -17,7 +17,7 @@ class Slide:
 
 
 class Slides(Document):
-    """Google Slides. Content read; write arrives in a later phase."""
+    """Google Slides: read (slides/as_text) + deck-wide text write (replace_text)."""
 
     @property
     def slides(self) -> list[Slide]:
@@ -26,3 +26,12 @@ class Slides(Document):
 
     def as_text(self) -> str:
         return "\n".join(s.as_text() for s in self.slides)
+
+    def replace_text(self, find: str, replace: str) -> None:
+        self._require_writable()
+        self._backend.slides_batch_update(self.id, [{"replaceAllText": {
+            "containsText": {"text": find, "matchCase": True}, "replaceText": replace}}])
+
+    def batch_update(self, requests: list) -> dict:
+        self._require_writable()
+        return self._backend.slides_batch_update(self.id, requests)

@@ -43,6 +43,10 @@ class Document(CommentsMixin):
     def export(self, mime_type: str) -> bytes:
         return self._backend.export_file(self.id, mime_type)
 
+    def _require_writable(self) -> None:
+        if self.read_only:
+            raise exc.ReadOnlyError("workspace is read_only; content writes are disabled")
+
 
 def subclass_for_mime(mime: str) -> type[Document]:
     if mime not in MIME_TO_TYPE:
