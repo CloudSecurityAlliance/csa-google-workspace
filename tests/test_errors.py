@@ -155,3 +155,17 @@ def test_call_non_idempotent_still_retries_429():
         return {"ok": True}
     assert _errors.call(flaky_429, idempotent=False, _sleep=lambda s: None) == {"ok": True}
     assert calls["n"] == 2
+
+
+def test_call_clamps_retry_after_to_60_seconds():
+    """Retry-After header value is clamped to max 60 seconds to prevent excessive sleep."""
+    calls = {"n": 0}
+    sleeps = []
+    def flaky_429_large_retry_after():
+        calls["n"] += 1
+        if calls["n"] < 2:
+            raise _http_error_with_headers(429, "rateLimitExceeded", "slow down",
+                                            headers={"status": "429", "retry-after": "999"})
+        return {"ok": True}
+    assert _errors.call(flaky_429_large_retry_after, _sleep=lambda s: sleeps.append(s)) == {"ok": True}
+    assert sleeps == [60]  # Should be clamped to 60, not 999

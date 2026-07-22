@@ -37,3 +37,16 @@ def test_writes_blocked_when_read_only():
     for call in (lambda: p.replace_text("a", "b"), lambda: p.batch_update([{}])):
         with pytest.raises(exc.ReadOnlyError):
             call()
+
+
+def test_replace_text_handles_empty_replies_list():
+    """Backend returns empty replies list instead of missing key or default."""
+    class FakeBackendEmptyReplies(FakeBackend):
+        def slides_batch_update(self, file_id, requests):
+            self._writes.append((file_id, "slides", requests))
+            return {"replies": []}
+
+    b = FakeBackendEmptyReplies(META)
+    p = Workspace(b).open("p")
+    result = p.replace_text("old", "new")
+    assert result == 0  # Should fall back to 0, not crash on IndexError

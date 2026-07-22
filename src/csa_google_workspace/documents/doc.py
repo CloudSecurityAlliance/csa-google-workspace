@@ -29,7 +29,7 @@ class Doc(Document):
         self._require_writable()
         resp = self._backend.docs_batch_update(self.id, [{"replaceAllText": {
             "containsText": {"text": find, "matchCase": match_case}, "replaceText": replace}}])
-        return resp.get("replies", [{}])[0].get("replaceAllText", {}).get("occurrencesChanged", 0)
+        return (resp.get("replies") or [{}])[0].get("replaceAllText", {}).get("occurrencesChanged", 0)
 
     def insert_text(self, text: str, at: int) -> None:
         self._require_writable()

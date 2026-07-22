@@ -82,6 +82,6 @@ def call(fn, *args, idempotent: bool = True, _sleep=time.sleep, **kwargs):
             retryable = status == 429 or (idempotent and status in _RETRYABLE)
             if retryable and attempt < _MAX_ATTEMPTS:
                 retry_after = _retry_after(err) if status == 429 else None
-                _sleep(retry_after if retry_after is not None else 0.5 * (2 ** (attempt - 1)))
+                _sleep(min(retry_after, 60) if retry_after is not None else 0.5 * (2 ** (attempt - 1)))
                 continue
             raise translate_http_error(err) from err

@@ -31,7 +31,7 @@ class Slides(Document):
         self._require_writable()
         resp = self._backend.slides_batch_update(self.id, [{"replaceAllText": {
             "containsText": {"text": find, "matchCase": match_case}, "replaceText": replace}}])
-        return resp.get("replies", [{}])[0].get("replaceAllText", {}).get("occurrencesChanged", 0)
+        return (resp.get("replies") or [{}])[0].get("replaceAllText", {}).get("occurrencesChanged", 0)
 
     def batch_update(self, requests: list) -> dict:
         self._require_writable()
