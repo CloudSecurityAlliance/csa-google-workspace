@@ -84,6 +84,16 @@ def test_sheet_end_to_end_live():
         assert "Sheet1" in s.tabs
         assert s.values("Sheet1!A1:B2") == [["Name", "Score"], ["Alice", "10"]]
         assert "Name\tScore" in s.as_text()
+        # multi-tab as_text (Tier 3): a second tab must not be silently dropped
+        ws._backend._services.sheets.spreadsheets().batchUpdate(
+            spreadsheetId=fid,
+            body={"requests": [{"addSheet": {"properties": {"title": "Data"}}}]}).execute()
+        ws._backend._services.sheets.spreadsheets().values().update(
+            spreadsheetId=fid, range="Data!A1", valueInputOption="RAW",
+            body={"values": [["extra"]]}).execute()
+        full = s.as_text()
+        assert "# Sheet1" in full and "# Data" in full and "extra" in full
+        assert s.as_text(tab="Data") == "extra"
         _assert_comment_lifecycle(s)
 
 
@@ -105,6 +115,11 @@ def test_slides_end_to_end_live():
                                   "translateX": 50, "translateY": 50, "unit": "PT"}}}},
             {"insertText": {"objectId": "e2etextbox1", "text": "E2E slide text"}}]}).execute()
         assert "E2E slide text" in ws.open(fid).as_text()
+        # Tier 3: the shape objectId is discoverable and insert_text prepends into it
+        p2 = ws.open(fid)
+        assert "e2etextbox1" in [oid for sl in p2.slides for oid in sl.shape_ids]
+        p2.insert_text("e2etextbox1", "PREFIX: ", index=0)
+        assert "PREFIX: E2E slide text" in ws.open(fid).as_text()
         _assert_comment_lifecycle(p)
 
 
@@ -135,8 +150,10 @@ def test_content_write_live():
         s = ws.open(sid)
         s.update("Sheet1!A1", [["hello", "world"]])
         assert s.values("Sheet1!A1:B1") == [["hello", "world"]]
-        s.clear("Sheet1!A1:B1")
-        assert s.values("Sheet1!A1:B1") == []
+        s.append_rows("Sheet1!A1", [["r2a", "r2b"]])          # Tier 3: values.append INSERT_ROWS
+        assert s.values("Sheet1!A2:B2") == [["r2a", "r2b"]]
+        s.clear("Sheet1!A1:B2")
+        assert s.values("Sheet1!A1:B2") == []
 
 
 def test_suggestions_read_live():

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-22 — Live-suite coverage for Tier 3 + a dedicated OAuth e2e suite
+
+Test-only; all gated behind `CSA_GW_INTEGRATION` (no runtime change):
+
+- Extended the live suite to exercise the Tier 3 additions against real Google:
+  `Sheet.append_rows`, multi-tab `as_text` (`# <tab>` headers + `tab=`), and
+  `Slides.insert_text` / `Slide.shape_ids`.
+- New **`tests/integration/test_oauth_live.py`** — end-to-end OAuth: a real `from_oauth`
+  login that reaches Google, token-file permissions (no group/other access), and the
+  `read_only` session contract (reads succeed, writes raise `ReadOnlyError`). Because the
+  writable login runs first, the read-only test reuses the cached token without re-prompting.
+- Gated integration tests: 6 → 9.
+
 ## 2026-07-21 — Tier 3 API-surface additions
 
 Closed the remaining within-scope content-write gaps (all `read_only`-gated, TDD):

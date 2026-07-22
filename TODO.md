@@ -107,6 +107,21 @@ they're the right release-readiness priorities.
   `asyncio.to_thread`. Lean: *document the `to_thread` pattern* (cheap) rather than build
   an async facade (large, and `google-api-python-client` is sync). Just needs a call.
 
+## Integration / live testing
+
+The offline unit suite (169 tests, `FakeBackend`) gates every PR. The **gated live suite**
+(`tests/integration/`) verifies against real Google and now covers the full surface —
+including the Tier 3 ops and a dedicated **OAuth end-to-end** file (`test_oauth_live.py`:
+real login, token-file permissions, `read_only` contract). Run it manually:
+
+```
+CSA_GW_INTEGRATION=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tests/integration/
+```
+
+- [ ] **Optional: a manual `workflow_dispatch` CI job** running the live suite with a stored
+  Google credentials secret. **Deferred to the security audit** — putting Google creds in CI
+  is a threat-model decision, not a default.
+
 ## Deferred — bigger / genuinely out of reach today (already tracked)
 
 These are recorded design decisions, **not bugs**:
