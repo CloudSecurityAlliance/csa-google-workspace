@@ -44,5 +44,5 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-      - name: Run unit suite + coverage (gate: fail_under in pyproject)
+      - name: Run unit suite + coverage (fail_under gate from pyproject)
         run: pytest -q --cov --cov-report=term-missing
