@@ -17,10 +17,19 @@ publish it to PyPI.** The correctness findings in Tier 0 below and the release-r
 work in Tier 1 are the substance of that milestone; Tier 2 tooling supports it. Treat
 these three tiers as the "1.0-on-PyPI" work-package.
 
-**Progress (2026-07-21):** Tier 0 fixes (PR #26), `py.typed` (PR #27), and pytest CI
-(PR #28) are done. **The one remaining blocker for a first PyPI publish is the package
-metadata** item in Tier 1 (below). Tier 2 tooling (ruff/mypy/coverage) is optional polish
-on top, not a publish blocker.
+**Progress (2026-07-21):** Tier 0 fixes (PR #26), `py.typed` (PR #27), pytest CI (PR #28),
+and the package-metadata pass are all done — the package builds and `twine check` passes
+for sdist + wheel at **v0.1.0**. **The only step left to actually publish is the release
+itself** (tag + upload), which needs a decision + a PyPI token — see "Publish" below.
+Tier 2 tooling (ruff/mypy/coverage) is optional polish, not a publish blocker.
+
+### Publish (the actual release — needs a human decision + credentials)
+
+- [ ] **Cut v0.1.0.** Tag the release and upload. Two paths:
+  (a) manual — `python -m build` then `twine upload dist/*` with a PyPI API token; or
+  (b) **preferred** — configure PyPI **Trusted Publishing** (OIDC) + a
+  `release`-triggered GitHub Actions job, so no long-lived token is stored. Requires
+  registering the project on PyPI first. (Optionally publish to TestPyPI once as a dry run.)
 
 ## Tier 0 — audit findings (correctness) — ✅ DONE
 
@@ -52,10 +61,10 @@ they're the right release-readiness priorities.
 
 - [x] **`py.typed` marker (PEP 561).** ✅ Shipped in PR #27 (marker + `package-data`;
   verified present in a built wheel + a packaging test guards it).
-- [ ] **Package metadata.** `pyproject.toml` has no `readme`, `license`/license-files,
-  `classifiers`, `keywords`, `[project.urls]` (repo, issues), or `authors`. It's
-  `0.0.1` with no PyPI-facing identity. Add these; decide on a first tagged release.
-  **← the remaining blocker for the first PyPI publish.**
+- [x] **Package metadata.** ✅ Done: `readme`, SPDX `license = "MIT OR Apache-2.0"` +
+  `license-files`, `authors`/`maintainers`, `keywords`, trove `classifiers`
+  (incl. `Typing :: Typed`), `[project.urls]`, and a single-sourced dynamic version.
+  Bumped to `0.1.0`; `build` + `twine check` green for sdist + wheel.
 - [x] **CI that runs the test suite.** ✅ Added in PR #28 — GitHub Actions runs
   `pytest -q` across Python 3.10–3.13 on push + PR (offline; live suite stays gated).
 

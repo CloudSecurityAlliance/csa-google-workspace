@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-07-21 — Packaged for PyPI (v0.1.0)
+
+First release-ready packaging pass, alongside the correctness fixes from an external audit.
+
+- **PyPI metadata.** `pyproject.toml` now carries `readme`, an SPDX
+  `license = "MIT OR Apache-2.0"` + `license-files`, `authors`/`maintainers`, `keywords`,
+  trove `classifiers` (incl. `Typing :: Typed`), and `[project.urls]`. The version is
+  single-sourced from `csa_google_workspace.__version__` via `dynamic`/`attr` (no more
+  two-places-to-bump drift). `python -m build` + `twine check` pass for both sdist and wheel.
+- **`py.typed` (PEP 561)** ships, so downstream mypy/pyright consume the inline type hints.
+- **Typed errors from `open()`.** `ApiBackend.get_file_metadata` now routes through the
+  error translator; the first call no longer leaks a raw `HttpError` on a
+  missing/forbidden/service-disabled file — it raises the typed `NotFoundError` /
+  `AccessError` / `ServiceDisabledError` the spec promises.
+- **Cell-map degrade is now a recorded warning** (stdlib `logging`), not silence — so an
+  export-cap / access / malformed-XLSX failure is distinguishable from a genuine no-match.
+- **CI.** GitHub Actions runs the unit suite on Python 3.10–3.13 for every push and PR
+  (the live Google suite stays gated behind `CSA_GW_INTEGRATION`).
+- Version bumped `0.0.1 → 0.1.0`.
+
 ## 2026-07-20 — Lifecycle & suggestions probes (empirical)
 
 Two new live-API probes under `experiments/`, each with a `RESULTS.md`, plus an
