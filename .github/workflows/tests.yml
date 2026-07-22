@@ -46,3 +46,21 @@ jobs:
           pip install -e ".[dev]"
       - name: Run unit suite + coverage (fail_under gate from pyproject)
         run: pytest -q --cov --cov-report=term-missing
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Install the RUNTIME closure only (not [dev]) so pip-audit scans shipped deps,
+      # plus the two scanners themselves.
+      - name: Install package (runtime deps) + scanners
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . pip-audit bandit
+      - name: Dependency CVE scan (pip-audit)
+        run: pip-audit --skip-editable
+      - name: Static security analysis (bandit)
+        run: bandit -r src

@@ -79,7 +79,7 @@ class Sheet(Document):
     def _cell_map(self) -> dict:
         if self._cell_map_cache is not None:
             return self._cell_map_cache
-        import xml.etree.ElementTree as _ET
+        import xml.etree.ElementTree as _ET  # nosec B405 - ParseError type only; parsing via defusedxml
         import zipfile
 
         from defusedxml.common import DefusedXmlException
