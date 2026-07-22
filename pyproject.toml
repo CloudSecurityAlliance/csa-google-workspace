@@ -8,8 +8,8 @@ dynamic = ["version"]
 description = "Read/write content and manage comments on Google Docs, Sheets, and Slides"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT OR Apache-2.0"
-license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [{ name = "Cloud Security Alliance" }]
 maintainers = [{ name = "Kurt Seifried", email = "kseifried@cloudsecurityalliance.org" }]
 keywords = [

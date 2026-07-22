@@ -5,7 +5,7 @@
 First release-ready packaging pass, alongside the correctness fixes from an external audit.
 
 - **PyPI metadata.** `pyproject.toml` now carries `readme`, an SPDX
-  `license = "MIT OR Apache-2.0"` + `license-files`, `authors`/`maintainers`, `keywords`,
+  `license = "Apache-2.0"` + `license-files`, `authors`/`maintainers`, `keywords`,
   trove `classifiers` (incl. `Typing :: Typed`), and `[project.urls]`. The version is
   single-sourced from `csa_google_workspace.__version__` via `dynamic`/`attr` (no more
   two-places-to-bump drift). `python -m build` + `twine check` pass for both sdist and wheel.
@@ -18,6 +18,8 @@ First release-ready packaging pass, alongside the correctness fixes from an exte
   export-cap / access / malformed-XLSX failure is distinguishable from a genuine no-match.
 - **CI.** GitHub Actions runs the unit suite on Python 3.10–3.13 for every push and PR
   (the live Google suite stays gated behind `CSA_GW_INTEGRATION`).
+- **License consolidated to Apache-2.0.** A single `LICENSE` (the earlier dual
+  MIT/Apache `LICENSE-MIT` + `LICENSE-APACHE` files were removed).
 - Version bumped `0.0.1 → 0.1.0`.
 
 ## 2026-07-20 — Lifecycle & suggestions probes (empirical)

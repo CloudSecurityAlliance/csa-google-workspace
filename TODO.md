@@ -61,7 +61,7 @@ they're the right release-readiness priorities.
 
 - [x] **`py.typed` marker (PEP 561).** ✅ Shipped in PR #27 (marker + `package-data`;
   verified present in a built wheel + a packaging test guards it).
-- [x] **Package metadata.** ✅ Done: `readme`, SPDX `license = "MIT OR Apache-2.0"` +
+- [x] **Package metadata.** ✅ Done: `readme`, SPDX `license = "Apache-2.0"` +
   `license-files`, `authors`/`maintainers`, `keywords`, trove `classifiers`
   (incl. `Typing :: Typed`), `[project.urls]`, and a single-sourced dynamic version.
   Bumped to `0.1.0`; `build` + `twine check` green for sdist + wheel.
