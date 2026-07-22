@@ -45,6 +45,11 @@ class UnsupportedOperation(CsaWorkspaceError):
     """The operation is impossible on this backend (e.g. accept a suggestion via the API)."""
 
 
+class DetachedError(CsaWorkspaceError):
+    """A Comment/Reply built via `from_api()` (not obtained through a Workspace) has no
+    backend attached and cannot be mutated. Fetch it via `Workspace.open(...).comments`."""
+
+
 class ApiError(CsaWorkspaceError):
     """Catch-all wrapper for an unclassified googleapiclient HttpError."""
 
