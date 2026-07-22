@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, cast
 
-from .exceptions import ReadOnlyError
+from .exceptions import DetachedError, ReadOnlyError
 
 if TYPE_CHECKING:
     from .backend import Backend
@@ -68,12 +68,18 @@ class Reply:
                    modified_time=parse_time(d.get("modifiedTime")))
 
     def edit(self, text: str) -> None:
+        if self._backend is None:
+            raise DetachedError("this Reply was built via Reply.from_api() and has no backend; "
+                                "obtain it via a Comment on a Workspace to mutate it")
         if self._read_only:
             raise ReadOnlyError("workspace is read_only; cannot edit a reply")
         d = self._backend.update_reply(self._file_id, self._comment_id, self.id, text)
         self.content = d.get("content"); self.html_content = d.get("htmlContent")
 
     def delete(self) -> None:
+        if self._backend is None:
+            raise DetachedError("this Reply was built via Reply.from_api() and has no backend; "
+                                "obtain it via a Comment on a Workspace to mutate it")
         if self._read_only:
             raise ReadOnlyError("workspace is read_only; cannot delete a reply")
         self._backend.delete_reply(self._file_id, self._comment_id, self.id)
@@ -114,6 +120,9 @@ class Comment:
         )
 
     def _guard(self):
+        if self._backend is None:
+            raise DetachedError("this Comment was built via Comment.from_api() and has no backend; "
+                                "obtain it via Workspace.open(...).comments to mutate it")
         if self._read_only:
             raise ReadOnlyError("workspace is read_only; cannot mutate comments")
 

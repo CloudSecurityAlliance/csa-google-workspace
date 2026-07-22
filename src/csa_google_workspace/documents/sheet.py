@@ -1,8 +1,12 @@
 import logging
 import re
+from typing import TYPE_CHECKING
 
 from .. import _cellmap
 from ..base import Document
+
+if TYPE_CHECKING:
+    from ..comments import Comment
 
 _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -63,14 +67,14 @@ class Sheet(Document):
             parts.append(f"# {t}\n{body}" if len(tabs) > 1 else body)
         return "\n\n".join(parts)
 
-    def create_comment(self, text: str, cell: str | None = None):
+    def create_comment(self, content: str, cell: str | None = None) -> "Comment":
         self._require_writable()
         self._cell_map_cache = None
         if cell is None:
-            return super().create_comment(text)
+            return super().create_comment(content)
         gid = self._gid()
         link = f"{self.url.split('/edit')[0]}/edit#gid={gid}&range={cell}"
-        return super().create_comment(f"{text}\n\n{link}")
+        return super().create_comment(f"{content}\n\n{link}")
 
     def _cell_map(self) -> dict:
         if self._cell_map_cache is not None:
