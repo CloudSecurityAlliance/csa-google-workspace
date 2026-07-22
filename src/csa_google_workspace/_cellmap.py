@@ -3,6 +3,7 @@ Heuristic: no confident unique match -> no entry (caller yields location=None).
 Uses defusedxml (not stdlib xml.etree): the XLSX comes from Google, but comment
 text inside it is attacker-controllable, so we harden against XXE / billion-laughs."""
 import io
+import logging
 import re
 import zipfile
 from collections import defaultdict
@@ -10,6 +11,17 @@ from collections import defaultdict
 import defusedxml.ElementTree as ET
 
 from .comments import Location
+
+log = logging.getLogger(__name__)
+
+# Defense-in-depth bounds on the XLSX parse path (SEC-1). Today the archive is
+# Google-generated and export-capped ~10 MB, so these are ceilings for a future where the
+# input source changes (upload/import, a different backend) and a decompression bomb or a
+# hostile comment volume becomes reachable. ZipInfo.file_size is read from the archive
+# header, so an oversized member is rejected *before* it is decompressed.
+_MAX_MEMBER_UNCOMPRESSED = 50 * 1024 * 1024    # 50 MB per persons/threadedComments member
+_MAX_TOTAL_UNCOMPRESSED = 100 * 1024 * 1024    # 100 MB across all members read
+_MAX_MEMBERS = 256                              # persons + threadedComments XML members
 
 
 def _local(tag: str) -> str:
@@ -35,16 +47,42 @@ def location_from_ref(ref: str) -> Location:
 
 def parse_xlsx_comments(xlsx_bytes: bytes) -> list[dict]:
     z = zipfile.ZipFile(io.BytesIO(xlsx_bytes))
+    budget = _MAX_TOTAL_UNCOMPRESSED
+    members = 0
+
+    def _read(zinfo: zipfile.ZipInfo) -> bytes | None:
+        """Read a member only if it stays within the per-member / total / count bounds;
+        otherwise skip it (best-effort mapping degrades, never OOMs)."""
+        nonlocal budget, members
+        if members >= _MAX_MEMBERS:
+            log.warning("XLSX comment parse hit the %d-member cap; skipping %s", _MAX_MEMBERS, zinfo.filename)
+            return None
+        if zinfo.file_size > _MAX_MEMBER_UNCOMPRESSED or zinfo.file_size > budget:
+            log.warning("XLSX member %s (%d bytes) exceeds the parse size budget; skipping",
+                        zinfo.filename, zinfo.file_size)
+            return None
+        members += 1
+        budget -= zinfo.file_size
+        return z.read(zinfo)
+
     persons: dict[str, str] = {}
-    for name in z.namelist():
+    for zinfo in z.infolist():
+        name = zinfo.filename
         if "/persons/" in name and name.endswith(".xml"):
-            for el in ET.fromstring(z.read(name)).iter():
+            data = _read(zinfo)
+            if data is None:
+                continue
+            for el in ET.fromstring(data).iter():
                 if _local(el.tag) == "person":
                     persons[el.get("id")] = el.get("displayName")
     roots: list[dict] = []
-    for name in z.namelist():
+    for zinfo in z.infolist():
+        name = zinfo.filename
         if "/threadedComments/" in name and name.endswith(".xml"):
-            for el in ET.fromstring(z.read(name)).iter():
+            data = _read(zinfo)
+            if data is None:
+                continue
+            for el in ET.fromstring(data).iter():
                 if _local(el.tag) != "threadedComment" or el.get("parentId"):
                     continue
                 text = ""
