@@ -13,6 +13,9 @@ MIME_TO_TYPE = {
 
 
 class CommentsMixin:
+    """Provides `comments` and `create_comment()` uniformly across document types.
+    A subclass may define `_locate_comment(raw_dict)` to enrich `Comment.location` via the locate hook."""
+
     @property
     def comments(self) -> CommentCollection:
         return CommentCollection(self._backend, self.id, self.read_only,
@@ -38,7 +41,7 @@ class Document(CommentsMixin):
         self.read_only = read_only
 
     def reload(self) -> None:
-        """Drop cached state (none yet in Phase 1)."""
+        """Drop cached state. Subclasses (e.g. Sheet) override this to clear their own caches."""
 
     def export(self, mime_type: str) -> bytes:
         return self._backend.export_file(self.id, mime_type)

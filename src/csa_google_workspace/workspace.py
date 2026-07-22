@@ -10,6 +10,7 @@ _ID_IN_URL = re.compile(r"/d/([a-zA-Z0-9_-]+)")
 
 
 def parse_file_id(url_or_id: str) -> str:
+    """Extract a Drive file id from a share URL, or return the input unchanged if it's already a bare id."""
     m = _ID_IN_URL.search(url_or_id)
     return m.group(1) if m else url_or_id
 
