@@ -9,9 +9,27 @@ It's designed to be **embedded**: a clean, typed Python surface for building AI 
 ## Install & test
 
 ```bash
-pip install -e ".[dev]"     # src/ layout, Python >=3.10
-pytest -q                    # unit suite: no network, no credentials
+pip install -e ".[dev]"       # src/ layout, Python >=3.10
+pytest -q                      # unit suite: no network, no credentials (in-memory FakeBackend)
+ruff check src tests && mypy   # lint + type-check (the CI `lint` job)
 ```
+
+Everything above runs offline and gates CI. Two **opt-in** suites exercise real Google and
+are skipped unless their env vars are set:
+
+```bash
+# Live API suite — real Docs/Sheets/Slides/Drive. Needs OAuth client secrets; a cached token
+# avoids re-consent, otherwise the first run opens a browser to log in:
+CSA_GW_INTEGRATION=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tests/integration/
+
+# Interactive OAuth suite — the login flow itself (token caching, file permissions, read-only
+# contract). Separate because it needs a human at a browser + touches the sensitive token:
+CSA_GW_OAUTH=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tests/oauth/
+```
+
+The client secret must be an **installed/desktop-app** OAuth client, and Drive, Docs, Sheets,
+and Slides must be enabled in its Cloud project (a scoped token still 403s until each API is
+enabled). `client_secret.json` and `token*.json` are gitignored — never commit them.
 
 ## Usage
 
