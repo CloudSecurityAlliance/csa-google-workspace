@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-23 — v0.1.2 (hardened release pipeline; no library changes)
+
+First release through the hardened supply-chain pipeline — no changes to the library code
+itself. This release exists to exercise and verify the pipeline:
+
+- GitHub Actions **pinned to commit SHAs** (`checkout` v7, `setup-python` v7,
+  `gh-action-pypi-publish` v1.14.1); Dependabot keeps them current.
+- Release-time **security gate** (`pip-audit` + `bandit`) runs before publish.
+- Publish runs through a protected **`pypi` environment** (manual approval).
+- **PEP 740 attestations** emitted — this should be the first release whose PyPI files carry
+  provenance.
+- `main` is now branch-protected (required checks, no direct/force push, admins enforced).
+
 ## 2026-07-23 — v0.1.1 (docs patch)
 
 - **README install fix.** Lead with the consumer install `pip install csa-google-workspace`
