@@ -76,6 +76,8 @@ request/user.
 
 ## Reporting a vulnerability
 
-Please report suspected vulnerabilities privately to the maintainers (open a
+Please report suspected vulnerabilities **privately** by opening a
 [GitHub security advisory](https://github.com/CloudSecurityAlliance/csa-google-workspace/security/advisories/new)
-or email the maintainer) rather than filing a public issue. We'll acknowledge and coordinate a fix.
+— **do not file a public issue** for a security report. If you can't use advisories, email
+`security@cloudsecurityalliance.org`. We'll acknowledge receipt and coordinate a fix and
+disclosure timeline with you.
