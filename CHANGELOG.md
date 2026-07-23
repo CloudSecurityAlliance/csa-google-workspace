@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-23 — v0.1.1 (docs patch)
+
+- **README install fix.** Lead with the consumer install `pip install csa-google-workspace`
+  (the PyPI page previously showed only the from-source `pip install -e ".[dev]"`); moved the
+  editable install + test/lint commands and the live-suite instructions under a new
+  **Development** section. No code change.
+
 ## 2026-07-22 — Split the interactive OAuth suite out (`tests/oauth/`)
 
 The browser-login tests are now their own suite, separate from the API-integration tests,

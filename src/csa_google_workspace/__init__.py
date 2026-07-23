@@ -16,4 +16,4 @@ __all__ = [
     # load-bearing types for embedders / custom backends (audit #26)
     "Backend", "Document", "CommentCollection", "DetachedError",
 ]
-__version__ = "0.1.0"
+__version__ = "0.1.1"
