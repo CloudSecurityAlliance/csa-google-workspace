@@ -6,30 +6,14 @@ It's designed to be **embedded**: a clean, typed Python surface for building AI 
 
 > **Status:** feature-complete for its scoped roadmap and **live-verified end-to-end against real Google**. Shipped across Docs/Sheets/Slides: comment management, content read/write, Sheets comment→cell mapping, and Docs suggestions read. See [`CHANGELOG.md`](./CHANGELOG.md); design + phased plans under [`docs/superpowers/`](./docs/superpowers/).
 
-## Install & test
+## Install
 
 ```bash
-pip install -e ".[dev]"       # src/ layout, Python >=3.10
-pytest -q                      # unit suite: no network, no credentials (in-memory FakeBackend)
-ruff check src tests && mypy   # lint + type-check (the CI `lint` job)
+pip install csa-google-workspace
 ```
 
-Everything above runs offline and gates CI. Two **opt-in** suites exercise real Google and
-are skipped unless their env vars are set:
-
-```bash
-# Live API suite — real Docs/Sheets/Slides/Drive. Needs OAuth client secrets; a cached token
-# avoids re-consent, otherwise the first run opens a browser to log in:
-CSA_GW_INTEGRATION=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tests/integration/
-
-# Interactive OAuth suite — the login flow itself (token caching, file permissions, read-only
-# contract). Separate because it needs a human at a browser + touches the sensitive token:
-CSA_GW_OAUTH=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tests/oauth/
-```
-
-The client secret must be an **installed/desktop-app** OAuth client, and Drive, Docs, Sheets,
-and Slides must be enabled in its Cloud project (a scoped token still 403s until each API is
-enabled). `client_secret.json` and `token*.json` are gitignored — never commit them.
+Python >=3.10. The package is typed (ships `py.typed`), so downstream `mypy`/`pyright` consume
+its type hints. Working on the library itself? See [Development](#development).
 
 ## Usage
 
@@ -101,6 +85,32 @@ This library is a building block for MCP servers / agents / automations acting *
 1. **Comments are a Google Drive API v3 concern — not the Sheets/Docs/Slides APIs** (those handle content). One comment API serves all three file types. (Sheets *notes* are separate and out of scope.)
 2. **You cannot anchor a comment to a specific Sheets cell via the API.** Google treats API-created anchors as unanchored; the real anchor is a `workbook-range` with an opaque id. Mapping a comment back to a cell requires exporting the sheet as XLSX and parsing the comment XML — the central hard problem, which the library solves (best-effort) via `comment.location` / `sheet.comments_by_cell()`.
 3. **The space isn't greenfield, so the value is in the hard parts** — reliable read-side cell mapping and clean Docs/Sheets/Slides coverage — not merely "supporting comments." See [`server-landscape.md`](./research/server-landscape.md).
+
+## Development
+
+```bash
+pip install -e ".[dev]"       # from a clone; src/ layout, Python >=3.10
+pytest -q                      # unit suite: no network, no credentials (in-memory FakeBackend)
+ruff check src tests && mypy   # lint + type-check (the CI `lint` job)
+```
+
+Everything above runs offline and gates CI. Two **opt-in** suites exercise real Google and
+are skipped unless their env vars are set:
+
+```bash
+# Live API suite — real Docs/Sheets/Slides/Drive. Needs OAuth client secrets; a cached token
+# avoids re-consent, otherwise the first run opens a browser to log in:
+CSA_GW_INTEGRATION=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tests/integration/
+
+# Interactive OAuth suite — the login flow itself (token caching, file permissions, read-only
+# contract). Separate because it needs a human at a browser + touches the sensitive token:
+CSA_GW_OAUTH=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tests/oauth/
+```
+
+The client secret must be an **installed/desktop-app** OAuth client, and Drive, Docs, Sheets,
+and Slides must be enabled in its Cloud project (a scoped token still 403s until each API is
+enabled). `client_secret.json` and `token*.json` are gitignored — never commit them.
+Releasing is documented in [`RELEASING.md`](./RELEASING.md).
 
 ## License
 
