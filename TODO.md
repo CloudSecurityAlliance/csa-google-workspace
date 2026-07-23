@@ -46,9 +46,14 @@ settings, worst-first:
 - [x] **🔧+⚙️ Environment gate on publish** — protected `pypi` GitHub Environment (required
   reviewer: repo owner) + `environment: pypi` on the publish job (PR #69). *Residual (optional):*
   tighten the PyPI trusted-publisher binding to require environment `pypi` (works without today).
-- [x] **🔧 PEP 740 attestations** — `attestations: true` on the pinned publisher (PR #69).
-  **⚠️ Verify** the *next* release shows `provenance` on PyPI (can't retrofit 0.1.0/0.1.1;
-  0.1.0 is a valid CI artifact — **not** yanked).
+- [x] **🔧 PEP 740 attestations** — `attestations: true` on the pinned publisher (PR #69),
+  **✅ verified** against PyPI's **Integrity API**: `0.1.0`, `0.1.1`, and `0.1.2` all return
+  `200` on `/integrity/csa-google-workspace/<ver>/<file>/provenance` — every release is
+  attested. *Correction:* the earlier "no provenance" reading was a **measurement error** —
+  the legacy `/pypi/<pkg>/<ver>/json` `urls[].provenance` field is unreliable (reads `false`
+  even when attestations exist); use the Integrity API. Attestations have shipped since
+  `0.1.0` (Trusted Publishing default), so there was never a gap to fix — the explicit
+  `attestations: true` just makes it intentional.
 - [x] **🔧 Security gate at release time** — `pip-audit` + `bandit` run before publish in
   `release.yml` (PR #69).
 - [x] **🔧 Dependency automation + pinned build** — `.github/dependabot.yml` (`pip` +
