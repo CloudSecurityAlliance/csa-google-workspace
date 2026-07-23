@@ -65,6 +65,16 @@ login + token-file handling, `CSA_GW_OAUTH=1`). The latter two skip unless opted
 ## Working in this repo
 
 - **Branch + PR for every change** (never commit to `main`); merge when CI is green.
-- **CI is GitHub CodeQL default-setup + a Python analyze job** (no workflow files in-repo). Two gotchas seen: CodeQL flags `"host" in url`-style substring checks (`py/incomplete-url-substring-sanitization`) even in test assertions; and an OAuth **scope grant ≠ API enablement** — a scoped token still 403s `SERVICE_DISABLED` until each API (Docs/Sheets/Slides) is enabled in the Cloud project.
-- **The feature roadmap is complete;** any new work (a deferred item or a new feature) follows the same **plan-then-execute rhythm:** write a spec/plan under `docs/superpowers/`, then implement TDD (unit tests via `FakeBackend`). Keep `README.md`'s manifest in sync.
+- **CI** (`.github/workflows/tests.yml`, runs on every PR): a `lint` job (ruff + mypy), a `test` matrix (pytest + coverage, Python 3.10–3.13, `fail_under=85`), and a `security` job (`pip-audit` + `bandit`). GitHub **CodeQL** default-setup also runs. Two gotchas seen: CodeQL flags `"host" in url`-style substring checks (`py/incomplete-url-substring-sanitization`) even in test assertions; and an OAuth **scope grant ≠ API enablement** — a scoped token still 403s `SERVICE_DISABLED` until each API (Docs/Sheets/Slides) is enabled in the Cloud project.
+- **New work follows the plan-then-execute rhythm:** write a spec/plan under `docs/superpowers/`, then implement TDD (unit tests via `FakeBackend`). Keep `README.md`'s manifest in sync. (Phase 1 — the library — is complete and on PyPI; phase 2 is the built-in MCP server.)
 - OAuth secrets (`credentials.json`, `token*.json`) and probe transcripts are gitignored — never commit them.
+
+### Cutting a release
+
+Publishing is automated via **PyPI Trusted Publishing (OIDC)** — never `twine upload` by hand.
+
+1. **Bump `__version__`** in `src/csa_google_workspace/__init__.py` (the single source of truth; `pyproject.toml` reads it dynamically) and add a dated `CHANGELOG.md` entry — via the normal **branch + PR**, merged to `main` first.
+2. **`gh release create vX.Y.Z`** creates the git tag + GitHub Release. **Publishing the Release** triggers `.github/workflows/release.yml`, which runs the suite, builds sdist+wheel, `twine check`s, and uploads to PyPI over OIDC (no token).
+3. **Verify:** `https://pypi.org/project/csa-google-workspace/` shows the new version; `pip install csa-google-workspace` in a clean venv.
+
+Invariants: the tag **must** equal the version (`vX.Y.Z` ↔ `__version__`). A PyPI version is **permanent** — yankable, never re-uploadable, so get it right. The README shown on PyPI is the long-description **frozen at that release** — doc fixes only reach PyPI on the next version bump. Full steps + one-time trusted-publisher setup: [`RELEASING.md`](RELEASING.md).
