@@ -25,11 +25,12 @@ Tier 2 tooling (ruff/mypy/coverage) is optional polish, not a publish blocker.
 
 ### Publish (the actual release — needs a human decision + credentials)
 
-- [ ] **Cut v0.1.0.** Tag the release and upload. Two paths:
-  (a) manual — `python -m build` then `twine upload dist/*` with a PyPI API token; or
-  (b) **preferred** — configure PyPI **Trusted Publishing** (OIDC) + a
-  `release`-triggered GitHub Actions job, so no long-lived token is stored. Requires
-  registering the project on PyPI first. (Optionally publish to TestPyPI once as a dry run.)
+- [x] **Release automation.** ✅ `.github/workflows/release.yml` publishes to PyPI via
+  Trusted Publishing (OIDC) on a published GitHub Release; steps in `RELEASING.md`.
+- [ ] **Cut v0.1.0.** Remaining, human steps: (1) add the PyPI *pending publisher* for
+  `csa-google-workspace` (owner `CloudSecurityAlliance`, workflow `release.yml`) per
+  `RELEASING.md`; (2) `gh release create v0.1.0` → the workflow builds + uploads. No token,
+  no TestPyPI dry-run (per decision).
 
 ## Tier 0 — audit findings (correctness) — ✅ DONE
 
