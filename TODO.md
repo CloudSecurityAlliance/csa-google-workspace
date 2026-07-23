@@ -31,44 +31,32 @@ Tier 2 tooling (ruff/mypy/coverage) is optional polish, not a publish blocker.
   create` → CI-built, tagged, GitHub-Released, uploaded over OIDC. Page:
   <https://pypi.org/project/csa-google-workspace/>.
 
-## Release-process / supply-chain hardening
+## Release-process / supply-chain hardening — ✅ DONE
 
-From a 2026-07-23 release-process review (re-verified here). Worst-first. Marked
-**🔧 code/config** (a PR does it) or **⚙️ admin** (needs GitHub/PyPI settings + a decision).
+From a 2026-07-23 release-process review (re-verified). Fixed in PR #69 (code) + repo-admin
+settings, worst-first:
 
-- [ ] **⚙️ Protect `main` (highest — the real trust boundary).** `main` is unprotected
-  (verified: `404 Branch not protected`), so the lint/test/security/CodeQL jobs are advisory
-  and anything with write access can push straight to `main` — which is what `release.yml`
-  builds from. Require PRs + those status checks, block direct push + force-push, enforce for
-  admins. Decide the review requirement (mandatory PR *review* changes the current solo/AI
-  merge flow — needs a reviewer or an admin bypass).
-- [ ] **🔧 Pin GitHub Actions to full commit SHAs.** `release.yml` uses
-  `pypa/gh-action-pypi-publish@release/v1` (a mutable branch) on the job holding
-  `id-token: write`, plus `actions/checkout@v4` / `setup-python@v5`; `tests.yml` likewise.
-  Pin each to a SHA (version in a comment). Highest-value CI hardening — a hijacked ref on the
-  publish job could exfiltrate the OIDC token and publish as us.
-- [ ] **🔧+⚙️ Environment gate on publish.** Add a protected `pypi` GitHub Environment
-  (required reviewer, restrict to `main`), set `environment: pypi` on the publish job, and
-  scope the PyPI trusted-publisher binding to that environment → a human approval before any
-  upload. (We deliberately omitted this for the first release; add it now.)
-- [ ] **🔧 Emit + verify PEP 740 attestations.** Verified gap: **neither `0.1.0` nor `0.1.1`
-  carries provenance on PyPI** (`provenance=False`), so attestations aren't landing. Set
-  `attestations: true` explicitly on `gh-action-pypi-publish` (and pin it) and confirm the
-  next release shows provenance. *Correction to the review's #4:* `0.1.0` is **not**
-  orphaned/manual — it's a CI-built, tagged, GitHub-Released artifact (same path as `0.1.1`);
-  **do not yank it.** Attestations can't be retrofitted to any existing version, so the fix is
-  purely forward-looking.
-- [ ] **🔧 Run the security gate at release time.** `release.yml` runs only `pytest` before
-  publish, not `pip-audit`/`bandit` — a CVE disclosed after the last PR could ship. Add the
-  security steps to the release job (or rely on `security` being a required check via branch
-  protection).
-- [ ] **🔧 Dependency automation + reproducible build.** Add `.github/dependabot.yml`
-  (`pip` + `github-actions` ecosystems). Pin the release build toolchain (`build`, `twine`).
-  (A full CI lockfile is optional/heavier for a library.)
-- [ ] **🔧 Lower-priority polish.** A "no secrets / expected contents in dist" check
-  (`check-manifest` or a grep of the sdist for `research/`/`experiments/` transcripts); fix the
-  truncated disclosure line in `SECURITY.md` (add the real maintainer email or drop the dangling
-  clause); optional SBOM; a post-publish "install from PyPI + import" smoke step.
+- [x] **⚙️ `main` is protected.** Branch protection via API: required status checks (`lint`,
+  `test (3.10–3.13)`, `security`), PRs required, direct + force pushes blocked, **enforced for
+  admins**. `required_approving_review_count = 0` so the solo/AI PR flow still merges (checks
+  gate, no human-approval bottleneck). *Residual (optional):* also require the CodeQL contexts,
+  and/or raise the review count if a second reviewer is ever available.
+- [x] **🔧 Actions pinned to commit SHAs** (PR #69) — `checkout` v4, `setup-python` v5,
+  `gh-action-pypi-publish` v1.14.1, across `tests.yml` + `release.yml`; Dependabot keeps them current.
+- [x] **🔧+⚙️ Environment gate on publish** — protected `pypi` GitHub Environment (required
+  reviewer: repo owner) + `environment: pypi` on the publish job (PR #69). *Residual (optional):*
+  tighten the PyPI trusted-publisher binding to require environment `pypi` (works without today).
+- [x] **🔧 PEP 740 attestations** — `attestations: true` on the pinned publisher (PR #69).
+  **⚠️ Verify** the *next* release shows `provenance` on PyPI (can't retrofit 0.1.0/0.1.1;
+  0.1.0 is a valid CI artifact — **not** yanked).
+- [x] **🔧 Security gate at release time** — `pip-audit` + `bandit` run before publish in
+  `release.yml` (PR #69).
+- [x] **🔧 Dependency automation + pinned build** — `.github/dependabot.yml` (`pip` +
+  `github-actions`); `build`/`twine` pinned in the release job (PR #69). *(Full CI lockfile
+  still optional/deferred.)*
+- [x] **🔧 Polish** — `SECURITY.md` disclosure text completed; sdist-contents guard added
+  (PR #69). *Deferred (optional):* SBOM publication; a post-publish "install from PyPI + import"
+  smoke step.
 
 ## Tier 0 — audit findings (correctness) — ✅ DONE
 
