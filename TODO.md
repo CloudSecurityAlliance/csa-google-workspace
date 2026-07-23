@@ -23,14 +23,52 @@ for sdist + wheel at **v0.1.0**. **The only step left to actually publish is the
 itself** (tag + upload), which needs a decision + a PyPI token — see "Publish" below.
 Tier 2 tooling (ruff/mypy/coverage) is optional polish, not a publish blocker.
 
-### Publish (the actual release — needs a human decision + credentials)
+### Publish — ✅ DONE
 
-- [x] **Release automation.** ✅ `.github/workflows/release.yml` publishes to PyPI via
-  Trusted Publishing (OIDC) on a published GitHub Release; steps in `RELEASING.md`.
-- [ ] **Cut v0.1.0.** Remaining, human steps: (1) add the PyPI *pending publisher* for
-  `csa-google-workspace` (owner `CloudSecurityAlliance`, workflow `release.yml`) per
-  `RELEASING.md`; (2) `gh release create v0.1.0` → the workflow builds + uploads. No token,
-  no TestPyPI dry-run (per decision).
+- [x] **Release automation** — `.github/workflows/release.yml` (Trusted Publishing / OIDC);
+  steps in `RELEASING.md`.
+- [x] **Published to PyPI** — `0.1.0` and `0.1.1` (docs patch) both cut via `gh release
+  create` → CI-built, tagged, GitHub-Released, uploaded over OIDC. Page:
+  <https://pypi.org/project/csa-google-workspace/>.
+
+## Release-process / supply-chain hardening
+
+From a 2026-07-23 release-process review (re-verified here). Worst-first. Marked
+**🔧 code/config** (a PR does it) or **⚙️ admin** (needs GitHub/PyPI settings + a decision).
+
+- [ ] **⚙️ Protect `main` (highest — the real trust boundary).** `main` is unprotected
+  (verified: `404 Branch not protected`), so the lint/test/security/CodeQL jobs are advisory
+  and anything with write access can push straight to `main` — which is what `release.yml`
+  builds from. Require PRs + those status checks, block direct push + force-push, enforce for
+  admins. Decide the review requirement (mandatory PR *review* changes the current solo/AI
+  merge flow — needs a reviewer or an admin bypass).
+- [ ] **🔧 Pin GitHub Actions to full commit SHAs.** `release.yml` uses
+  `pypa/gh-action-pypi-publish@release/v1` (a mutable branch) on the job holding
+  `id-token: write`, plus `actions/checkout@v4` / `setup-python@v5`; `tests.yml` likewise.
+  Pin each to a SHA (version in a comment). Highest-value CI hardening — a hijacked ref on the
+  publish job could exfiltrate the OIDC token and publish as us.
+- [ ] **🔧+⚙️ Environment gate on publish.** Add a protected `pypi` GitHub Environment
+  (required reviewer, restrict to `main`), set `environment: pypi` on the publish job, and
+  scope the PyPI trusted-publisher binding to that environment → a human approval before any
+  upload. (We deliberately omitted this for the first release; add it now.)
+- [ ] **🔧 Emit + verify PEP 740 attestations.** Verified gap: **neither `0.1.0` nor `0.1.1`
+  carries provenance on PyPI** (`provenance=False`), so attestations aren't landing. Set
+  `attestations: true` explicitly on `gh-action-pypi-publish` (and pin it) and confirm the
+  next release shows provenance. *Correction to the review's #4:* `0.1.0` is **not**
+  orphaned/manual — it's a CI-built, tagged, GitHub-Released artifact (same path as `0.1.1`);
+  **do not yank it.** Attestations can't be retrofitted to any existing version, so the fix is
+  purely forward-looking.
+- [ ] **🔧 Run the security gate at release time.** `release.yml` runs only `pytest` before
+  publish, not `pip-audit`/`bandit` — a CVE disclosed after the last PR could ship. Add the
+  security steps to the release job (or rely on `security` being a required check via branch
+  protection).
+- [ ] **🔧 Dependency automation + reproducible build.** Add `.github/dependabot.yml`
+  (`pip` + `github-actions` ecosystems). Pin the release build toolchain (`build`, `twine`).
+  (A full CI lockfile is optional/heavier for a library.)
+- [ ] **🔧 Lower-priority polish.** A "no secrets / expected contents in dist" check
+  (`check-manifest` or a grep of the sdist for `research/`/`experiments/` transcripts); fix the
+  truncated disclosure line in `SECURITY.md` (add the real maintainer email or drop the dangling
+  clause); optional SBOM; a post-publish "install from PyPI + import" smoke step.
 
 ## Tier 0 — audit findings (correctness) — ✅ DONE
 
