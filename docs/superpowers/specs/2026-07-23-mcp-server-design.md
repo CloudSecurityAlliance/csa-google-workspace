@@ -37,24 +37,38 @@ document-scoped, so every tool takes a file id/URL.
 
 ## 3. Architecture
 
+Mirrors the library's own composition — a factory/DI seam plus per-axis **tool producers** —
+so the delivery layer never re-derives what the library already owns. `create_server` parallels
+`Workspace`; the producers parallel the library's two axes (uniform comments ~ `CommentsMixin`;
+variant content ~ `documents/`).
+
 ```
 src/csa_google_workspace/mcp/
   __init__.py        # re-exports create_server, main
   __main__.py        # `python -m csa_google_workspace.mcp` -> main()
-  server.py          # create_server(workspace) -> FastMCP app; tool/resource/prompt defs
+  server.py          # create_server(workspace) -> FastMCP app; composes the producers below
+  _comments.py       # register_comment_tools(app, ws)   — UNIFORM axis (all file types) ~ CommentsMixin
+  _content.py        # register_content_tools(app, ws)    — VARIANT axis; read/write via open() + typed methods
+  _resources.py      # register_resources(app, ws)        — the document-text resource
+  _prompts.py        # register_prompts(app, ws)          — the comment-triage prompt
   _config.py         # env -> Workspace (from_oauth); read_only flag
-  _schemas.py        # TypedDict/pydantic models for structured tool output
+  _schemas.py        # structured-output models for tool results
 ```
 
-- **`create_server(workspace: Workspace) -> FastMCP`** builds and returns the app with all
-  tools/resources/prompts bound to the given `Workspace`. This is the seam that makes the
-  server testable: tests pass a `Workspace(FakeBackend(...))`; the CLI builds a real one.
+- **`create_server(workspace: Workspace) -> FastMCP`** builds the app and calls each
+  `register_*` producer to bind tools/resources/prompts to the given `Workspace`. This is the
+  DI seam (parallel to `Workspace` itself): tests pass `Workspace(FakeBackend(...))`, the CLI
+  builds a real one. Each producer is independently testable against `FakeBackend`.
 - **`main()`** (entry point) reads config (§5), constructs the `Workspace` via `from_oauth`,
-  calls `create_server`, and runs it over stdio (`app.run()`).
-- **Document-centric dispatch:** each tool opens the target file (`ws.open(file)`) and calls
-  the matching library method, dispatching on document type where needed (e.g. `read_text`
-  works on all three; `comments_by_cell` is Sheets-only). No caching — matches the library's
-  point-in-time read model; a fresh `open()` per call.
+  calls `create_server`, and runs it over stdio (`app.run()`). **All logging goes to stderr** —
+  under stdio, stdout is the JSON-RPC channel and must never be written to (no `print`, no
+  stdout log handler; the library's own `logging` warnings must land on stderr).
+- **Factory-based dispatch (not a type ladder).** Content tools use `ws.open(file)` — the
+  library's MIME-sniffing producer — and call the returned typed `Document`'s method directly,
+  leaning on the library's polymorphism. A capability the type lacks (e.g. `replace_text` on a
+  `Sheet`) is translated into a clean tool error, rather than re-derived with an
+  `if doc.type == …` ladder in the MCP layer. Stateless: a fresh `open()` per call (matches the
+  library's point-in-time read model; no caching).
 
 ## 4. Tool / resource / prompt surface
 
@@ -77,8 +91,10 @@ list-shaped, so the client gets typed data, not prose. `file` is an id or share 
 *(Doc/Slides)*, `append_text`, `insert_text(text, index)`, `delete_range(start, end)` *(destructive)*;
 `update_cells(range, values, value_input_option="RAW")`, `append_rows`, `clear_cells` *(destructive)*
 *(Sheets)*; `slides_insert_text(object_id, text, index=0)`.
-A tool invoked on the wrong document type returns a clear error (e.g. `replace_text` on a
-spreadsheet → "not supported for spreadsheets; use update_cells").
+A tool whose capability the opened document lacks translates the library's absence /
+`UnsupportedOperation` into a clear tool error (e.g. `replace_text` on a spreadsheet →
+"not supported for spreadsheets; use update_cells") — via the factory dispatch in §3, not a
+hand-rolled type ladder.
 
 ### `CommentOut` (structured)
 `{id, author, content, resolved, created_time, cell|null, replies: [{id, author, content}]}`
@@ -86,7 +102,9 @@ spreadsheet → "not supported for spreadsheets; use update_cells").
 returned (the agent needs it); the library's redacted `__repr__` protects *logs*, not tool output.
 
 ### Resource
-- `document://{file}/text` — a read resource returning the document's plain text (`as_text`).
+- `document://{file_id}/text` — a read resource returning the document's plain text
+  (`as_text`). Keyed by **bare file id** (not a share URL) to keep the URI clean; the tools
+  still accept id-or-URL.
 
 ### Prompt
 - `triage_open_comments(file)` — a prompt template that instructs the model to list open
