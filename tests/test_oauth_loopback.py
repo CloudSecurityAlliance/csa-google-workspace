@@ -44,13 +44,17 @@ class TestPkceIsRequestedRatherThanInherited:
         import google_auth_oauthlib.flow as gaf
 
         seen = {}
-        original = gaf.Flow.from_client_secrets_file.__func__
+        # The spy follows the call: since #449 we read the file ourselves and hand a parsed
+        # config to `from_client_config`, so watching `from_client_secrets_file` would watch a
+        # call that no longer happens and pass vacuously - the exact failure this test's own
+        # docstring warns about one layer down.
+        original = gaf.Flow.from_client_config.__func__
 
-        def spy(cls, file, scopes=None, **kwargs):
+        def spy(cls, config, scopes=None, **kwargs):
             seen.update(kwargs)
-            return original(cls, file, scopes=scopes, **kwargs)
+            return original(cls, config, scopes=scopes, **kwargs)
 
-        monkeypatch.setattr(gaf.Flow, "from_client_secrets_file", classmethod(spy))
+        monkeypatch.setattr(gaf.Flow, "from_client_config", classmethod(spy))
         secrets = tmp_path / "client_secret.json"
         secrets.write_text(
             '{"installed":{"client_id":"cid","client_secret":"cs",'

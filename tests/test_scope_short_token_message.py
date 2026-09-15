@@ -143,8 +143,12 @@ class TestTheTwoCallersStillWantOppositeThings:
         monkeypatch.setattr(auth.Credentials, "from_authorized_user_file",
                             staticmethod(lambda p: _Stale()))
         monkeypatch.setattr(
-            auth.InstalledAppFlow, "from_client_secrets_file",
+            auth.InstalledAppFlow, "from_client_config",
             staticmethod(lambda *a, **k: type("F", (), {
                 "run_local_server": lambda self, **kw: fresh})()))
 
-        assert auth.load_credentials("client.json", str(token), read_only=False) is fresh
+        # A real file on disk: `load_credentials` parses it itself since #449.
+        secrets = tmp_path / "client_secret.json"
+        secrets.write_text('{"installed":{"client_id":"cid","client_secret":"cs"}}',
+                           encoding="utf-8")
+        assert auth.load_credentials(str(secrets), str(token), read_only=False) is fresh

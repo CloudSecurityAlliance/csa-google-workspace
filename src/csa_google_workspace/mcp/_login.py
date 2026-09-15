@@ -14,7 +14,7 @@ import os
 import sys
 from collections.abc import Mapping
 
-from ..auth import load_cached_credentials, token_path_for
+from ..auth import load_cached_credentials, read_client_secrets, token_path_for
 from ..exceptions import AuthError
 from ..workspace import Workspace
 from ._config import Settings
@@ -72,13 +72,19 @@ def _branded_success_page():
 
 
 def _client_id_of(path: str) -> str | None:
-    """The client_id from a client-secrets file, or None if unreadable."""
+    """The client_id from a client-secrets file, or None if unreadable.
+
+    None-on-unreadable is deliberate - this only feeds a warning, and a login must not fail
+    because the warning could not be computed. But the definition of "unreadable" was too wide:
+    this caught `ValueError`, `JSONDecodeError` subclasses it, and a UTF-8 BOM therefore
+    disabled the different-OAuth-client warning silently rather than failing anything (#449).
+    Reading through `read_client_secrets` narrows it to files that really are unusable.
+    """
     try:
-        with open(os.path.expanduser(path)) as f:
-            d = json.load(f)
-        return (d.get("installed") or d.get("web") or {}).get("client_id") or None
-    except (OSError, ValueError):
+        d = read_client_secrets(path)
+    except AuthError:
         return None
+    return (d.get("installed") or d.get("web") or {}).get("client_id") or None
 
 
 def _token_client_id(token_path: str) -> str | None:

@@ -1,4 +1,5 @@
 """OAuth installed-app flow + scope logic. Acts as a real user; writes on by default."""
+import json
 import os
 
 from google.auth.exceptions import GoogleAuthError
@@ -188,6 +189,58 @@ def _write_token(token_path: str, creds: Credentials) -> None:
         f.write(creds.to_json())
 
 
+# Where a client-secrets file comes from, said once. Every failure below ends with this,
+# because "your file is wrong" without "and here is the file you should have" is half an error.
+_WHERE_FROM = ("It must be the JSON for a Google Cloud OAuth client of type **Desktop app**. "
+               "Download it from the Cloud console, or install the CSA one, then point "
+               "CSA_GW_CLIENT_SECRETS at it or place it at "
+               "~/.csa_google_workspace/client_secret.json.")
+
+
+def read_client_secrets(path: str) -> dict:
+    """Parse an OAuth client-secrets file into a client config, or raise an actionable `AuthError`.
+
+    This exists so that **we** open the file rather than `google_auth_oauthlib`, for two reasons
+    that are worth keeping apart (#449).
+
+    **Encoding.** `from_client_secrets_file` opens with no `encoding=` argument, so a UTF-8 BOM
+    lands at char 0 and `json.load` refuses a file that is perfectly valid JSON. A BOM is legal
+    and common on Windows - `Set-Content -Encoding utf8` emits one under Windows PowerShell 5.1
+    though not under PowerShell 7 - so tolerating it belongs in the client, not in a rule about
+    who may write the file. `utf-8-sig` strips a BOM when present and is a no-op when absent.
+
+    **Actionability.** The upstream failure is `Expecting value: line 1 column 1 (char 0)` raised
+    from inside a dependency, naming neither the path nor the fact that a client-secrets file was
+    being read. That is unactionable even when the file genuinely IS malformed, which is the case
+    that outlives the BOM. Every raise here names the path, says what the file is for, and keeps
+    the underlying parse detail rather than swallowing it.
+
+    Callers hand the result to `from_client_config`. All three readers in the tree go through
+    here, including `_login._client_id_of`, whose `except ValueError` silently caught the
+    `JSONDecodeError` (it subclasses `ValueError`) and disabled the wrong-OAuth-client warning.
+    """
+    try:
+        with open(os.path.expanduser(path), encoding="utf-8-sig") as f:
+            config = json.load(f)
+    except FileNotFoundError:
+        raise AuthError(f"No OAuth client secrets at {path}. {_WHERE_FROM}") from None
+    except OSError as e:
+        raise AuthError(f"Could not read the OAuth client secrets at {path}: {e}") from None
+    except json.JSONDecodeError as e:
+        # `e` carries "line 1 column 1 (char 0)"; keep it - it is the only thing that
+        # distinguishes a BOM-like problem at char 0 from a truncated file at char 4000.
+        raise AuthError(f"The OAuth client secrets at {path} are not valid JSON: {e}. "
+                        f"{_WHERE_FROM}") from None
+    if not isinstance(config, dict) or not (config.get("installed") or config.get("web")):
+        # Valid JSON, wrong document. Overwhelmingly a service-account key. Upstream's own
+        # message ("Client secrets must be for a web or installed app") names no file, and when
+        # two candidate files are on disk that is the whole question.
+        top = ", ".join(sorted(config)) if isinstance(config, dict) else type(config).__name__
+        raise AuthError(f"The JSON at {path} is not an OAuth client: it has no 'installed' or "
+                        f"'web' key (found: {top}). {_WHERE_FROM}")
+    return config
+
+
 def load_credentials(client_secrets: str, token_path: str, read_only: bool,
                      *, force: bool = False) -> Credentials:
     """Interactive: reuse the cache, else open a browser for consent. Terminal use only.
@@ -208,7 +261,8 @@ def load_credentials(client_secrets: str, token_path: str, read_only: bool,
     if creds and creds.expired and creds.refresh_token:
         _refresh(creds)
     else:
-        creds = InstalledAppFlow.from_client_secrets_file(client_secrets, required).run_local_server(port=0)
+        config = read_client_secrets(client_secrets)    # we open it; see read_client_secrets (#449)
+        creds = InstalledAppFlow.from_client_config(config, required).run_local_server(port=0)
     _write_token(token_path, creds)
     return creds
 
