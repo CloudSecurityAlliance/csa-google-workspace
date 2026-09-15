@@ -170,7 +170,9 @@ class TestALocalFile:
         somebody opens in Excel as an executable formula."""
         out = call(build({"CSA_GW_EXPORT_DIR": str(tmp_path)}),
                    destination="file", path="register.csv")
-        written = pathlib.Path(out["written_path"]).read_text()
+        # utf-8 to match the writer (`_tools/comments.py` writes `encoding="utf-8"`).
+        # The locale default read the same file as cp1252 on Windows.
+        written = pathlib.Path(out["written_path"]).read_text(encoding="utf-8")
         for line in written.splitlines()[1:]:
             assert not line.split(",")[0].startswith(("=", "+", "-", "@"))
 

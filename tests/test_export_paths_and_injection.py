@@ -83,7 +83,12 @@ class TestWhereItLands:
         assert target == wanted.resolve()
 
     def test_a_tilde_path_is_expanded(self, tmp_path, monkeypatch):
+        # BOTH, because `expanduser` reads a different variable per platform: posixpath
+        # uses HOME, ntpath uses USERPROFILE and never consults HOME at all. Setting only
+        # HOME left `~` resolving to the real profile on Windows, so this test compared a
+        # developer's actual home against tmp_path. (#453)
         monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
         target, _ = _export.resolve_export_path(
             "~/review.csv", default_dir=str(tmp_path), doc_name="D", stamp="s")
         assert target == (tmp_path / "review.csv").resolve()

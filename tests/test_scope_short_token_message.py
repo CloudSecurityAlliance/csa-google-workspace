@@ -73,7 +73,12 @@ class TestTheMessageLooksInsteadOfAsserting:
         """The real path is `~/.csa_google_workspace/token.json`. Checking existence without
         expanding the tilde would report every real install as having no token — which is the
         exact bug, reintroduced one layer down."""
+        # BOTH, because `expanduser` reads a different variable per platform: posixpath
+        # uses HOME, ntpath uses USERPROFILE and never consults HOME at all. Setting only
+        # HOME left `~` resolving to the real profile on Windows, so this test compared a
+        # developer's actual home against tmp_path. (#453)
         monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
         home_token = tmp_path / ".csa_google_workspace" / "token.json"
         home_token.parent.mkdir(parents=True)
         home_token.write_text("{}")

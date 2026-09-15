@@ -109,7 +109,12 @@ def _dataclasses_in_package():
                 continue
             hand_written = any(isinstance(b, ast.FunctionDef) and b.name == "__repr__"
                                for b in node.body)
-            yield f"{path.relative_to(SRC)}::{node.name}", hand_written
+            # POSIX separator ALWAYS. `relative_to` yields a WindowsPath whose str is
+            # `demo\_plan.py`, so on Windows every id missed the hand-written safe-list above and
+            # the guard reported both "every class is undeclared" AND "the safe-list names classes
+            # that no longer exist" - simultaneously, which is the tell. Not silent, but the guard
+            # certified nothing on that platform. (#453)
+            yield f"{path.relative_to(SRC).as_posix()}::{node.name}", hand_written
 
 
 def test_every_dataclass_either_redacts_or_is_declared_safe():
