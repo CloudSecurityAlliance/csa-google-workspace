@@ -1,6 +1,9 @@
 """OAuth installed-app flow + scope logic. Acts as a real user; writes on by default."""
+import errno
 import json
 import os
+import subprocess  # nosec B404 - icacls only, fixed argv, no shell; see `_harden`
+import sys
 
 from google.auth.exceptions import GoogleAuthError
 from google.auth.transport.requests import Request
@@ -175,17 +178,120 @@ def _refresh(creds: Credentials) -> None:
         raise AuthError("could not refresh cached credentials") from e
 
 
+_WINDOWS = os.name == "nt"
+
+# The principals an owner-only file may name on Windows. The current user, plus the two
+# root-equivalents: excluding SYSTEM or Administrators would stop nothing, because an
+# administrator can take ownership of any file - exactly as `root` reads a 0o600 file on POSIX.
+# Tolerating them is therefore the faithful analogue of 0o600, not a concession.
+#
+# What does the discriminating work is the INHERITANCE test below, not this set. A file that
+# merely sits in a well-permissioned directory carries those same three principals as INHERITED
+# ACEs (marked `(I)` by icacls), and an inherited ACL is the directory's, not ours - it changes
+# the moment the file moves or the directory is re-permissioned. So "no inherited ACEs" is what
+# separates a file we hardened from one that happens to be somewhere safe, and without it this
+# predicate would answer True for every freshly created file and never fail.
+_WINDOWS_ROOT_EQUIVALENTS = ("NT AUTHORITY\\SYSTEM", "BUILTIN\\Administrators")
+
+
+def _current_windows_principal() -> str:
+    return f"{os.environ.get('USERDOMAIN', '')}\\{os.environ.get('USERNAME', '')}".lstrip("\\")
+
+
+def _icacls(*args: str) -> subprocess.CompletedProcess:
+    # Fixed argv, no shell, and every path is one this process constructed.
+    return subprocess.run(["icacls", *args], capture_output=True, text=True,  # nosec B603 B607
+                          check=False)
+
+
+def file_is_owner_only(path: str) -> bool | None:
+    """Is `path` readable only by the user who owns it? `None` when that cannot be determined.
+
+    Asked as a QUESTION rather than asserted as `0o600`, because `0o600` is the POSIX *answer*
+    and hard-coding it is how the Windows gap survived: `chmod` there sets only the read-only
+    bit, so `os.stat` keeps reporting `0o666` however often you harden the file.
+
+    `None` is not `False`. A file that is absent, or an `icacls` that could not run, is *unknown*,
+    and reporting unknown as protected is the dangerous direction - the same asymmetry
+    `labels.py` and `_inventory.py` are built on.
+    """
+    if not os.path.exists(path):
+        return None
+    if not _WINDOWS:
+        return os.stat(path).st_mode & 0o077 == 0
+    result = _icacls(path)
+    if result.returncode != 0:
+        return None
+    allowed = {_current_windows_principal().lower(),
+               *(p.lower() for p in _WINDOWS_ROOT_EQUIVALENTS)}
+    seen = False
+    for line in result.stdout.splitlines():
+        line = line.removeprefix(path).strip()
+        if not line or line.startswith("Successfully processed"):
+            continue
+        if "(I)" in line:
+            return False            # an inherited ACE: the ACL is the directory's, not ours
+        # `DOMAIN\user:(F)` - rsplit, because a principal itself contains no colon but a path
+        # prefix would. Everything after the last colon is the rights mask.
+        if line.rsplit(":", 1)[0].strip().lower() not in allowed:
+            return False
+        seen = True
+    return True if seen else None
+
+
+def _harden(path: str, fd: int | None = None) -> None:
+    """Restrict `path` to its owner, by whatever mechanism the platform actually has.
+
+    On Windows `chmod`/`fchmod` are no-ops for the owner/group/other bits, so the POSIX calls
+    below "succeeded" while changing nothing - `THREAT_MODEL.md` T5 cited them as its mitigation
+    and on Windows the evidence did not hold. `icacls /inheritance:r /grant:r <user>:F` is the
+    real equivalent: it drops the inherited ACL and leaves exactly one ACE.
+    """
+    if _WINDOWS:
+        result = _icacls(path, "/inheritance:r", "/grant:r", f"{_current_windows_principal()}:F")
+        if result.returncode != 0:
+            # Warn rather than refuse: failing the write would leave a user unable to log in at
+            # all because an ACL tool was unavailable, and they would still have no token. The
+            # warning goes to stderr, which is safe under stdio (only stdout carries JSON-RPC).
+            print(f"Warning: could not restrict {path} to your account; it inherits the "
+                  f"directory's permissions. icacls said: {result.stderr.strip() or 'nothing'}",
+                  file=sys.stderr)
+    elif fd is not None and hasattr(os, "fchmod"):
+        os.fchmod(fd, 0o600)
+    else:
+        # A DIRECTORY NEEDS THE EXECUTE BIT. 0o600 on a directory is not "tighter", it is
+        # unusable - nothing can traverse into it, including us on the next call. The Windows
+        # branch above has no such distinction, which is exactly why it is easy to lose here:
+        # a Windows-only test run cannot reach this line at all.
+        os.chmod(path, 0o700 if os.path.isdir(path) else 0o600)
+
+
+def _refuse_symlink(path: str) -> None:
+    """Explicit symlink check, because `O_NOFOLLOW` does not exist on Windows.
+
+    The old guard was `getattr(os, "O_NOFOLLOW", 0)` - which on Windows is `| 0`, so the flag
+    read as present and the defence was absent. This check is NOT a replacement: on POSIX
+    `O_NOFOLLOW` is still passed and is the atomic one. This is racy by construction (the link
+    can appear between the check and the open) and only narrows the window on the platform that
+    has no atomic option at all. Windows symlinks and junctions are both reparse points and
+    `os.path.islink` reports both.
+    """
+    if os.path.islink(path):
+        raise OSError(errno.ELOOP, "refusing to write the token through a symlink", path)
+
+
 def _write_token(token_path: str, creds: Credentials) -> None:
     token_dir = os.path.dirname(token_path)
     if token_dir and not os.path.isdir(token_dir):
         os.makedirs(token_dir, exist_ok=True)
-        os.chmod(token_dir, 0o700)      # only harden a dir we created; don't mutate a caller's (#4)
-    # O_NOFOLLOW refuses a symlink at token_path (symlink/TOCTOU attack); fchmod enforces
-    # 0o600 even when the file already existed, since O_TRUNC keeps a file's prior mode (#17).
+        _harden(token_dir)              # only harden a dir we created; don't mutate a caller's (#4)
+    _refuse_symlink(token_path)
+    # O_NOFOLLOW refuses a symlink at token_path (symlink/TOCTOU attack); the post-open harden
+    # enforces owner-only even when the file already existed, since O_TRUNC keeps a file's prior
+    # permissions (#17). Both are POSIX-only mechanisms; see `_harden` and `_refuse_symlink`.
     fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
     with os.fdopen(fd, "w") as f:
-        if hasattr(os, "fchmod"):
-            os.fchmod(fd, 0o600)
+        _harden(token_path, fd)
         f.write(creds.to_json())
 
 

@@ -5,7 +5,6 @@ breaking the cache/reconsent/refresh branching would ship green. These monkeypat
 the Google objects and use a real tmp_path token file — no browser, no network.
 """
 import os
-import stat
 
 import pytest
 
@@ -120,8 +119,11 @@ def test_written_token_and_dir_are_owner_only(tmp_path, monkeypatch):
 
     auth.load_credentials(_client_secrets(tmp_path), str(token), read_only=False)
 
-    assert stat.S_IMODE(os.stat(token).st_mode) == 0o600
-    assert stat.S_IMODE(os.stat(token.parent).st_mode) == 0o700
+    # Asked as a question, not asserted as 0o600. `chmod` is a no-op on Windows, so the mode
+    # literal answered 0o666 forever there while the file was genuinely unprotected - the
+    # assertion certified nothing on the platform that needed it most.
+    assert auth.file_is_owner_only(str(token)) is True
+    assert auth.file_is_owner_only(str(token.parent)) is True
 
 
 def test_corrupt_cached_token_raises_auth_error(tmp_path, monkeypatch):
@@ -139,29 +141,36 @@ def test_existing_token_file_mode_is_enforced(tmp_path, monkeypatch):
     """#17: O_TRUNC keeps a pre-existing file's mode, so fchmod must re-tighten to 0o600."""
     token = tmp_path / "token.json"
     token.write_text("old")
-    token.chmod(0o644)                                       # pre-existing, world-readable
+    if os.name != "nt":
+        token.chmod(0o644)                                   # pre-existing, world-readable
     _patch_from_file(monkeypatch, FakeCreds(valid=False, expired=False, refresh_token=None))
     _patch_flow(monkeypatch, FakeCreds(valid=True))          # falls through to (re)write
     auth.load_credentials(_client_secrets(tmp_path), str(token), read_only=False)
-    assert stat.S_IMODE(os.stat(token).st_mode) == 0o600
+    assert auth.file_is_owner_only(str(token)) is True
 
 
 def test_preexisting_token_dir_is_not_chmodded(tmp_path, monkeypatch):
     """#4: a caller-supplied existing dir must not have its mode mutated as a side effect."""
     d = tmp_path / "caller-dir"
     d.mkdir()
-    d.chmod(0o755)
+    if os.name != "nt":
+        d.chmod(0o755)
     token = d / "token.json"
+    before = auth.file_is_owner_only(str(d))
     _patch_flow(monkeypatch, FakeCreds(valid=True))
     auth.load_credentials(_client_secrets(tmp_path), str(token), read_only=False)
-    assert stat.S_IMODE(os.stat(d).st_mode) == 0o755         # unchanged, not forced to 0o700
-    assert stat.S_IMODE(os.stat(token).st_mode) == 0o600     # the file we created is hardened
+    assert auth.file_is_owner_only(str(d)) == before         # unchanged, not hardened for them
+    assert auth.file_is_owner_only(str(token)) is True       # the file we created is hardened
 
 
 def test_symlinked_token_path_is_refused(tmp_path, monkeypatch):
     """#17: O_NOFOLLOW must refuse to write through a symlink at the token path."""
     link = tmp_path / "token.json"
-    link.symlink_to(tmp_path / "nonexistent-target.json")    # dangling -> not a valid cache, reaches write
+    try:
+        link.symlink_to(tmp_path / "nonexistent-target.json")  # dangling -> reaches the write
+    except (OSError, NotImplementedError):                     # Windows needs Developer Mode
+        pytest.skip("this platform will not create a symlink without elevation; the explicit "
+                    "check is covered by tests/test_token_hardening_is_platform_honest.py")
     _patch_flow(monkeypatch, FakeCreds(valid=True))
     with pytest.raises(OSError):
         auth.load_credentials(_client_secrets(tmp_path), str(link), read_only=False)
@@ -207,7 +216,7 @@ def test_cached_expired_token_is_refreshed_and_persisted(tmp_path, monkeypatch):
     result = auth.load_cached_credentials(str(token), read_only=False)
     assert result is creds and creds.refreshed is True
     assert token.read_text() == '{"token": "fake"}'          # refreshed token persisted
-    assert stat.S_IMODE(os.stat(token).st_mode) == 0o600     # and still owner-only
+    assert auth.file_is_owner_only(str(token)) is True       # and still owner-only
 
 
 def test_cached_missing_token_raises_rather_than_prompting(tmp_path, monkeypatch):

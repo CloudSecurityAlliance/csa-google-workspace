@@ -52,7 +52,7 @@ looked for, which is the reason this table exists.
 <!-- BEGIN GENERATED COVERAGE -->
 | group | first covered by |
 |---|---|
-| `src/csa_google_workspace/` — top level | **partial** — 22/25 at 2026-09-01 · 77% of lines |
+| `src/csa_google_workspace/` — top level | **partial** — 22/25 at 2026-09-01 · 75% of lines |
 | `documents/` — per-type content | 2026-07-22 · claude-code |
 | `mcp/` — server, auth flow, config, resources | **partial** — 15/16 at 2026-09-01 · 84% of lines |
 | `mcp/_tools/` — the tool registrations | 2026-08-27 · claude-code · 58% of lines |
