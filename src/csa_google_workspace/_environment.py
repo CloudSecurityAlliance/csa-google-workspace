@@ -15,6 +15,7 @@ Same data, different destination, different answer.
 """
 from __future__ import annotations
 
+import itertools
 import os
 import platform
 import sys
@@ -121,14 +122,43 @@ class Environment:
 def _installed_via() -> str:
     """How this copy was installed, inferred from where it lives.
 
-    Worth reporting because the three routes fail differently: a pipx venv is isolated and
+    Worth reporting because the routes fail differently: a pipx or uv-tool venv is isolated and
     upgrades cleanly, a shared environment can have another project's pin holding the version
     down, and an editable checkout is somebody's working tree that may not match any release.
+
+    `uv tool` is checked because CSA standardised on uv (DEC-012) and a uv tool venv lives under
+    `site-packages` like any other, so without this it reported `pip (venv)` (#447). Not false,
+    but it loses the isolation fact the field exists to carry - and it sent the reader of a
+    problem report hunting for a cross-project pin that cannot exist in a tool venv.
+
+    The two layouts differ, MEASURED 2026-09-15 rather than recalled:
+
+        POSIX    ~/.local/share/uv/tools/<pkg>/lib/python3.12/site-packages/<pkg>
+        Windows  %APPDATA%/uv/tools/<pkg>/Lib/site-packages/<pkg>        (no pythonX.Y level)
+
+    so `uv` ADJACENT to `tools` is the only part common to both. Adjacency rather than two
+    separate `in` checks, because `/home/uv/projects/tools/...` is a perfectly ordinary path.
+
+    A uv-created *project* venv (`uv venv`) is deliberately NOT special-cased: it is a venv, it
+    reports as one, and the isolation story is the same. Telling it apart would mean reading
+    `pyvenv.cfg`, and this module promises no filesystem access beyond its own package.
+
+    **The residual, measured the same day by tripping over it.** Path-sniffing answers where the
+    package LIVES, not how it was installed, so `UV_TOOL_DIR` (or `PIPX_HOME`) pointing somewhere
+    without the giveaway segment falls through to `pip (venv)`. Confirmed: a `uv tool install`
+    into a temp `UV_TOOL_DIR` reports `pip (venv)`, and the same command into the default
+    location reports `uv tool`. Definitive markers do exist - a tool venv carries
+    `uv-receipt.toml`, and any uv venv writes `uv = <version>` into `pyvenv.cfg` - but both are
+    filesystem reads this module does not take. The existing `pipx` check has had exactly this
+    limitation since it was written; this is not a new weakness, it is the same fidelity, and
+    the field is a triage hint on a bug report rather than anything decisions rest on.
     """
     location = os.path.abspath(os.path.dirname(__file__))
     parts = location.replace("\\", "/").lower().split("/")
     if "pipx" in parts:
         return "pipx"
+    if any(a == "uv" and b == "tools" for a, b in itertools.pairwise(parts)):
+        return "uv tool"
     if any(p in ("site-packages", "dist-packages") for p in parts):
         return "pip (shared environment)" if sys.prefix == sys.base_prefix else "pip (venv)"
     return "editable checkout or source tree"
@@ -144,9 +174,12 @@ def describe_environment() -> Environment:
     # obvious alternative - warning about a Python below the 3.10 floor - is unreachable,
     # because pip refuses the install; ruff says so too.)
     if installed_via.startswith("pip (shared"):
+        # uv first (DEC-012), pipx retained: the advice is read by somebody who has a problem
+        # NOW, and plenty of machines are still pipx-installed. Naming only the standard would
+        # make the note useless to exactly the people most likely to hit the stale-pin case.
         notes.append("Installed into a shared environment: another project's pin can hold this "
-                     "package at an old version. `pipx install csa-google-workspace[mcp]` "
-                     "isolates it.")
+                     "package at an old version. `uv tool install csa-google-workspace[mcp]` "
+                     "isolates it (or `pipx install` on a machine not yet migrated).")
     return Environment(
         server_version=__version__,
         python_version=platform.python_version(),

@@ -127,7 +127,17 @@ class TestEnvironment:
         from csa_google_workspace import _environment
         monkeypatch.setattr(_environment, "_installed_via",
                             lambda: "pip (shared environment)")
-        assert any("pipx" in note for note in _environment.describe_environment().notes)
+        note = " ".join(_environment.describe_environment().notes)
+        assert "uv tool install" in note, "CSA standardised on uv (DEC-012); lead with it"
+        assert "pipx" in note, "pipx installs still exist and the advice must work for them"
+
+    def test_a_uv_tool_install_gets_no_note(self, monkeypatch):
+        """A uv tool venv is isolated exactly as a pipx one is, so the shared-environment note
+        must not fire for it. Before #447 it was reported as `pip (venv)`, which is not false but
+        sends a triager looking for a cross-project pin that cannot exist there."""
+        from csa_google_workspace import _environment
+        monkeypatch.setattr(_environment, "_installed_via", lambda: "uv tool")
+        assert _environment.describe_environment().notes == []
 
     def test_an_isolated_install_gets_no_note(self):
         from csa_google_workspace import _environment
@@ -139,6 +149,13 @@ class TestEnvironment:
     @pytest.mark.parametrize("location,expected", [
         ("/Users/x/.local/pipx/venvs/csa-google-workspace/lib/python3.12/site-packages/"
          "csa_google_workspace", "pipx"),
+        # uv tool layouts, MEASURED rather than recalled (2026-09-15): the POSIX and Windows
+        # trees differ in case and in whether a pythonX.Y level exists, so `uv/tools` adjacency
+        # is the only part common to both.
+        ("/Users/x/.local/share/uv/tools/csa-google-workspace/lib/python3.12/site-packages/"
+         "csa_google_workspace", "uv tool"),
+        ("C:/Users/x/AppData/Roaming/uv/tools/csa-google-workspace/Lib/site-packages/"
+         "csa_google_workspace", "uv tool"),
         ("/opt/homebrew/lib/python3.12/site-packages/csa_google_workspace", "pip"),
         ("/Users/x/GitHub/csa-google-workspace/src/csa_google_workspace", "editable"),
     ])
