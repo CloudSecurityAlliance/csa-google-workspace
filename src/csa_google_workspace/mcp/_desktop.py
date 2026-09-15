@@ -31,6 +31,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..auth import _harden
+
 SERVER_KEY = "csa-google-workspace"
 SCRIPT_NAME = "csa-google-workspace-mcp"
 
@@ -169,9 +171,20 @@ def configure(path: Path | None = None, *, env: Mapping[str, str] | None = None,
 
 
 def _restrict(path: Path) -> None:
-    """Owner-only. Best-effort: a filesystem without POSIX modes must not fail a configure."""
+    """Owner-only. Best-effort: a filesystem without POSIX modes must not fail a configure.
+
+    Delegates to `auth._harden`, which is where the platform knowledge lives (#451). This used to
+    be a bare `path.chmod(0o600)`, and "a filesystem without POSIX modes" turned out not to be a
+    hypothetical: on Windows `chmod` moves only the read-only bit, so this silently did nothing
+    while the docstring and the call site both said `0600`.
+
+    That mattered more here than almost anywhere else. `CSA_GW_CLIENT_SECRETS` is deliberately
+    excluded from this file, but `CSA_GW_TOKEN` points a local reader straight at the full-Drive
+    token and the allowlisted URLs are the policy itself - so an unprotected config is a map to
+    the credential, sitting beside a credential whose own protection had the same hole. (#453)
+    """
     try:
-        path.chmod(0o600)
+        _harden(str(path))
     except OSError:                       # pragma: no cover - platform-dependent
         pass
 
