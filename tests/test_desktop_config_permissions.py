@@ -22,13 +22,20 @@ every one of them since installation.
 from __future__ import annotations
 
 import json
-import stat
+import os
 
+from csa_google_workspace import auth
 from csa_google_workspace.mcp import _desktop
 
 
-def mode_of(path):
-    return stat.S_IMODE(path.stat().st_mode)
+def owner_only(path):
+    """Asked as a question, not as `0o600`.
+
+    `0o600` is the POSIX *answer*. On Windows `chmod` moves only the read-only bit, so the mode
+    literal answered `0o666` forever while the file was genuinely unprotected - the same gap
+    #451 found in the token writer, in a file that is a map to that very token. (#453)
+    """
+    return auth.file_is_owner_only(str(path))
 
 
 def existing_config(path, servers=None):
@@ -45,29 +52,31 @@ def configure(path, **kw):
 
 
 class TestTheConfigIsNotWorldReadable:
-    def test_a_newly_created_config_is_0600(self, tmp_path):
+    def test_a_newly_created_config_is_owner_only(self, tmp_path):
         path = tmp_path / "claude_desktop_config.json"
         configure(path)
-        assert mode_of(path) == 0o600, (
-            f"config written {oct(mode_of(path))}; it names the token path and the allowlist")
+        assert owner_only(path) is True, (
+            "config is readable beyond its owner; it names the token path and the allowlist")
 
     def test_an_existing_config_is_tightened_too(self, tmp_path):
         """Somebody who ran an older version already has a 0644 file. Rewriting it is the only
         chance to fix that, and skipping it would leave the exposure in place for exactly the
         people who have been using this longest."""
         path = existing_config(tmp_path / "claude_desktop_config.json")
-        path.chmod(0o644)
+        if os.name != "nt":
+            path.chmod(0o644)
         configure(path)
-        assert mode_of(path) == 0o600
+        assert owner_only(path) is True
 
-    def test_the_backup_is_0600_as_well(self, tmp_path):
+    def test_the_backup_is_owner_only_as_well(self, tmp_path):
         """A backup of a sensitive file is a sensitive file. `shutil.copy2` preserves the
         SOURCE's mode, so a previously-0644 config produced a 0644 backup."""
         path = existing_config(tmp_path / "claude_desktop_config.json")
-        path.chmod(0o644)
+        if os.name != "nt":
+            path.chmod(0o644)
         result = configure(path)
         assert result.backup is not None, "precondition: an existing changed file is backed up"
-        assert mode_of(result.backup) == 0o600
+        assert owner_only(result.backup) is True
 
     def test_a_dry_run_writes_nothing_at_all(self, tmp_path):
         path = tmp_path / "claude_desktop_config.json"

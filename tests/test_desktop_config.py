@@ -22,6 +22,7 @@ only place Desktop will read them.
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
@@ -37,7 +38,9 @@ class TestTheCommandItWrites:
     def test_it_is_an_absolute_path(self):
         """The whole point. A bare name is what fails under launchd's PATH."""
         command, _ = _desktop.launch_command()
-        assert command[0].startswith("/")
+        # `os.path.isabs`, not `startswith("/")`: an absolute Windows path is `C:\...`, so the
+        # POSIX spelling of "absolute" failed here while the production code was correct. (#453)
+        assert os.path.isabs(command[0])
 
     def test_it_does_not_use_a_bare_python3(self):
         """`python3` on the GUI PATH is macOS's 3.9, below the 3.10 floor - so even a
@@ -50,9 +53,9 @@ class TestTheCommandItWrites:
 class TestWritingTheConfig:
     def test_it_creates_the_file_when_absent(self, config):
         _desktop.configure(config, env={})
-        written = json.loads(config.read_text())
+        written = json.loads(config.read_text(encoding="utf-8"))
         assert "csa-google-workspace" in written["mcpServers"]
-        assert written["mcpServers"]["csa-google-workspace"]["command"].startswith("/")
+        assert os.path.isabs(written["mcpServers"]["csa-google-workspace"]["command"])
 
     def test_it_keeps_other_servers(self, config):
         """The file is shared. Overwriting it would remove every other MCP server the user
