@@ -29,7 +29,7 @@ import wsgiref.simple_server
 import wsgiref.util
 from dataclasses import dataclass, field
 
-from ..auth import _write_token, scopes_for
+from ..auth import _write_token, read_client_secrets, scopes_for
 from ._success_page import SUCCESS_HTML
 
 
@@ -157,8 +157,11 @@ def build_flow(client_secrets: str, read_only: bool, redirect_uri: str):
     # google-auth-oauthlib floor because ">=1.0 admits releases where the default is off", and
     # 1.0.0 already defaults it on. A version bound would constrain what may be INSTALLED; this
     # constrains what the code DOES, which is the thing worth constraining.
-    flow = Flow.from_client_secrets_file(client_secrets, scopes=scopes_for(read_only),
-                                         autogenerate_code_verifier=True)
+    # `from_client_config`, not `from_client_secrets_file`: we read the file ourselves so a
+    # UTF-8 BOM does not make a valid client unreadable and a malformed one names itself (#449).
+    flow = Flow.from_client_config(read_client_secrets(client_secrets),
+                                   scopes=scopes_for(read_only),
+                                   autogenerate_code_verifier=True)
     flow.redirect_uri = redirect_uri
     return flow
 

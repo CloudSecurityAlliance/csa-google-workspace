@@ -49,9 +49,25 @@ def _patch_from_file(monkeypatch, creds_or_exc):
     monkeypatch.setattr(auth.Credentials, "from_authorized_user_file", loader)
 
 
+def _client_secrets(tmp_path, encoding="utf-8"):
+    """A real client-secrets file on disk, because `load_credentials` now reads it itself.
+
+    It used to hand the path straight to `from_client_secrets_file`, so the literal string
+    "client.json" was enough. Since #449 we parse it ourselves - to tolerate a UTF-8 BOM and to
+    fail with a message naming the file - which means these tests exercise the real reader
+    rather than a mock standing in for it. That is the better trade: one less mock, and the
+    consent branch is now proven against a file that actually parses.
+    """
+    p = tmp_path / "client_secret.json"
+    p.write_text('{"installed":{"client_id":"cid","client_secret":"cs",'
+                 '"auth_uri":"https://accounts.google.com/o/oauth2/auth",'
+                 '"token_uri":"https://oauth2.googleapis.com/token"}}', encoding=encoding)
+    return str(p)
+
+
 def _patch_flow(monkeypatch, creds):
-    monkeypatch.setattr(auth.InstalledAppFlow, "from_client_secrets_file",
-                        lambda secrets, scopes: FakeFlow(creds))
+    monkeypatch.setattr(auth.InstalledAppFlow, "from_client_config",
+                        lambda config, scopes: FakeFlow(creds))
 
 
 def test_valid_cached_token_is_returned_without_flow(tmp_path, monkeypatch):
@@ -81,7 +97,7 @@ def test_missing_token_triggers_oauth_flow(tmp_path, monkeypatch):
     fresh = FakeCreds(valid=True)
     _patch_flow(monkeypatch, fresh)
 
-    result = auth.load_credentials("client.json", str(token), read_only=False)
+    result = auth.load_credentials(_client_secrets(tmp_path), str(token), read_only=False)
     assert result is fresh and token.exists()
 
 
@@ -94,14 +110,15 @@ def test_insufficient_scopes_forces_reconsent(tmp_path, monkeypatch):
     _patch_flow(monkeypatch, fresh)
 
     # the cached token lacks a required scope -> discarded, re-consented
-    assert auth.load_credentials("client.json", str(token), read_only=False) is fresh
+    assert auth.load_credentials(_client_secrets(tmp_path), str(token),
+                                 read_only=False) is fresh
 
 
 def test_written_token_and_dir_are_owner_only(tmp_path, monkeypatch):
     token = tmp_path / "creds" / "token.json"   # dir is created by load_credentials
     _patch_flow(monkeypatch, FakeCreds(valid=True))
 
-    auth.load_credentials("client.json", str(token), read_only=False)
+    auth.load_credentials(_client_secrets(tmp_path), str(token), read_only=False)
 
     assert stat.S_IMODE(os.stat(token).st_mode) == 0o600
     assert stat.S_IMODE(os.stat(token.parent).st_mode) == 0o700
@@ -125,7 +142,7 @@ def test_existing_token_file_mode_is_enforced(tmp_path, monkeypatch):
     token.chmod(0o644)                                       # pre-existing, world-readable
     _patch_from_file(monkeypatch, FakeCreds(valid=False, expired=False, refresh_token=None))
     _patch_flow(monkeypatch, FakeCreds(valid=True))          # falls through to (re)write
-    auth.load_credentials("client.json", str(token), read_only=False)
+    auth.load_credentials(_client_secrets(tmp_path), str(token), read_only=False)
     assert stat.S_IMODE(os.stat(token).st_mode) == 0o600
 
 
@@ -136,7 +153,7 @@ def test_preexisting_token_dir_is_not_chmodded(tmp_path, monkeypatch):
     d.chmod(0o755)
     token = d / "token.json"
     _patch_flow(monkeypatch, FakeCreds(valid=True))
-    auth.load_credentials("client.json", str(token), read_only=False)
+    auth.load_credentials(_client_secrets(tmp_path), str(token), read_only=False)
     assert stat.S_IMODE(os.stat(d).st_mode) == 0o755         # unchanged, not forced to 0o700
     assert stat.S_IMODE(os.stat(token).st_mode) == 0o600     # the file we created is hardened
 
@@ -147,7 +164,7 @@ def test_symlinked_token_path_is_refused(tmp_path, monkeypatch):
     link.symlink_to(tmp_path / "nonexistent-target.json")    # dangling -> not a valid cache, reaches write
     _patch_flow(monkeypatch, FakeCreds(valid=True))
     with pytest.raises(OSError):
-        auth.load_credentials("client.json", str(link), read_only=False)
+        auth.load_credentials(_client_secrets(tmp_path), str(link), read_only=False)
 
 
 def test_corrupt_token_error_does_not_leak_cause(tmp_path, monkeypatch):
