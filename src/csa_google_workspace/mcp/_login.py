@@ -88,8 +88,11 @@ def _client_id_of(path: str) -> str | None:
 
 
 def _token_client_id(token_path: str) -> str | None:
+    # `utf-8` explicitly: its sibling `_client_id_of` was fixed in #449 and this was missed.
+    # A token is ASCII JSON today, so this is the "correct, lucky, or broken" case rather than a
+    # live bug - but the locale default is a property of the AUTHOR'S machine, never of the file.
     try:
-        with open(os.path.expanduser(token_path)) as f:
+        with open(os.path.expanduser(token_path), encoding="utf-8") as f:
             return json.load(f).get("client_id") or None
     except (OSError, ValueError):
         return None

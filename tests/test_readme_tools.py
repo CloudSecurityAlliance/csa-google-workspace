@@ -41,7 +41,7 @@ def documented_tools() -> set[str]:
     tools alongside `—` rows for capabilities that have no tool, and prose elsewhere mentions
     tools in passing. Only the table that claims to be the list is the list.
     """
-    text = README.read_text()
+    text = README.read_text(encoding="utf-8")
     start = text.index("**Tools** —")
     end = text.index("The find-and-read names", start)
     return set(re.findall(r"`([a-z_]+)`", text[start:end]))
@@ -62,7 +62,7 @@ def test_the_readme_does_not_promise_tools_that_do_not_exist():
 
 def test_the_stated_count_matches():
     """The count is the first thing a skimmer reads, so it has to be true."""
-    stated = re.search(r"\*\*Tools\*\* — (\d+),", README.read_text())
+    stated = re.search(r"\*\*Tools\*\* — (\d+),", README.read_text(encoding="utf-8"))
     assert stated, "the tool table no longer states a count"
     assert int(stated.group(1)) == len(registered_tools())
 
@@ -98,7 +98,7 @@ CLAUDE_TOOLS = GOOGLE_TOOLS | {"update_file", "share_file", "trash_file"}
 
 def comparison_rows() -> list[tuple[set[str], str]]:
     """(tool names in the row, what the `Ours` column says) for each row of the table."""
-    text = README.read_text()
+    text = README.read_text(encoding="utf-8")
     body = text[text.index(COMPARISON_START):text.index(COMPARISON_END)]
     rows = []
     for line in body.splitlines():
@@ -132,7 +132,7 @@ def test_the_comparison_table_does_not_claim_a_tool_that_does_not_exist():
 
 def test_the_stated_tool_counts_are_arithmetic_that_holds():
     """Three numbers in the `Where this actually stands` table, all checkable."""
-    text = README.read_text()
+    text = README.read_text(encoding="utf-8")
     registered = registered_tools()
 
     row = re.search(r"\| MCP tools \| (\d+) \| (\d+) \| \*\*(\d+)\*\* \|", text)

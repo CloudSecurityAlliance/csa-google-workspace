@@ -127,7 +127,7 @@ def configure(path: Path | None = None, *, env: Mapping[str, str] | None = None,
     created = not path.exists()
     if not created:
         try:
-            existing = json.loads(path.read_text() or "{}")
+            existing = json.loads(path.read_text(encoding="utf-8") or "{}")
         except json.JSONDecodeError as e:
             raise ValueError(
                 f"{path} is not valid JSON ({e}), so it has not been touched. Fix or move it "
@@ -157,7 +157,7 @@ def configure(path: Path | None = None, *, env: Mapping[str, str] | None = None,
         _restrict(backup)
         _prune_backups(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(rendered)
+    path.write_text(rendered, encoding="utf-8")
     # 0600 EXPLICITLY, and on every run rather than only at creation. No secret VALUE lands
     # here - carried_env() excludes CSA_GW_CLIENT_SECRETS, deliberately - but CSA_GW_TOKEN
     # points a local reader straight at the full-Drive token, and the allowlisted URLs are the

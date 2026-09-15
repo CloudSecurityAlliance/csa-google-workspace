@@ -54,6 +54,24 @@ def speak(*requests: dict, env_extra: dict | None = None, timeout: int = 60):
 
     A deliberately minimal environment: no token is configured, because the server starts without
     one by design and every assertion here is about the protocol rather than about Drive.
+
+    MINIMAL AND VIABLE ARE DIFFERENT PROPERTIES, and on Windows this harness had only the first
+    (#453). Without `SystemRoot`, Winsock cannot initialise, so `asyncio` fails on IMPORT:
+
+        File "...\\asyncio\\windows_events.py", line 8, in <module>
+            import _overlapped
+        OSError: [WinError 10106] The requested service provider could not be loaded or initialized
+
+    The server therefore died before reading stdin, and the loop below reported "no answer within
+    60s" **while failing in half a second** - a diagnosis that is the opposite of what happened.
+    All 13 tests in this file failed that way, on every Windows machine, invisibly, because CI is
+    ubuntu-only.
+
+    `SystemRoot` is added and nothing else. It is platform plumbing rather than configuration, and
+    measured sufficient. In particular `USERPROFILE`, `APPDATA` and `LOCALAPPDATA` are deliberately
+    still absent: they are what `~` resolves through, and exposing them would let the server find a
+    developer's real `~/.csa_google_workspace/client_secret.json` - which is exactly the
+    hermeticity the `CSA_GW_TOKEN` line below exists to protect.
     """
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
@@ -62,6 +80,8 @@ def speak(*requests: dict, env_extra: dict | None = None, timeout: int = 60):
         # Somewhere that cannot exist, so a developer's real cached token is never touched.
         "CSA_GW_TOKEN": "/nonexistent/csa-gw-wire-test/token.json",
     }
+    if os.name == "nt":
+        env["SystemRoot"] = os.environ["SystemRoot"]
     env.update(env_extra or {})
     proc = subprocess.Popen(
         [sys.executable, "-m", "csa_google_workspace.mcp"],
