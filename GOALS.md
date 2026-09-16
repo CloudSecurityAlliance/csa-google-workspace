@@ -15,9 +15,27 @@ A person can point this at their own Drive, in their own AI client, and trust it
 matter — because every claim it makes about Google's behaviour has been **probed rather than
 inferred**, and every capability it does not have is stated rather than hidden.
 
-The differentiator is **comments**. Not file listing, not content read — comments across Docs,
-Sheets and Slides, which is the part that is genuinely hard, poorly documented upstream, and where
-people arrive having already failed to build it themselves ([#340](https://github.com/CloudSecurityAlliance/csa-google-workspace/issues/340)).
+**Correction, 2026-09-16.** This file previously said the differentiator was *comments*. A capture of
+Google's own four Workspace MCP servers ([`research/captures/`](research/captures/)) falsified that:
+`docsmcp` and `sheetsmcp` **write** comments and `docsmcp` **accepts and rejects suggestions**, and all
+four read comments. That is [#364](https://github.com/CloudSecurityAlliance/csa-google-workspace/issues/364)
+having already shipped while nothing here was watching.
+
+What survives the capture, stated narrowly because the broad version was wrong:
+
+- **Slides comment writes** — Google reads them and does not write them.
+- **Sharing writes** — Google has `get_file_permissions` and nothing that grants, revokes, or resolves
+  an access proposal.
+- **The capability layer** — Google's servers have no profiles, no gating, and no operator control over
+  what an agent may do. That is the whole of this project's security posture, and it is the
+  differentiator that does not evaporate when a vendor ships a feature.
+- **Anchors** — plausibly, and *not established*. It needs a behavioural comparison rather than a
+  registry diff.
+
+The durable position is therefore **not** a capability nobody else has. It is that this server can be
+pointed at a real person's Drive and constrained, which is a different claim and a harder one to
+obsolete ([#340](https://github.com/CloudSecurityAlliance/csa-google-workspace/issues/340) — people
+arrive having already failed to build this themselves).
 
 ## Near-term
 
