@@ -72,6 +72,51 @@ def test_file_is_owner_only_can_tell_a_loose_file_from_a_tight_one(tmp_path):
     assert auth.file_is_owner_only(str(loose)) is False
 
 
+@pytest.mark.skipif(os.name != "nt", reason="an ACL stray is a Windows-only shape")
+def test_hardening_removes_a_principal_windows_itself_put_there(tmp_path):
+    """`/inheritance:r` drops only INHERITED aces; `/grant:r` replaces only the named one.
+
+    So an EXPLICIT ace that neither names survives both, and the process default DACL is where
+    those come from: a file created by a process launched from PowerShell carries
+    `NT AUTHORITY\\LogonSessionId_0_<id>:(RX)`, and the same code launched from Git Bash produces
+    a file with no such ace. Measured 2026-09-15, one machine, two shells, opposite answers - so
+    before this, `_harden`'s result depended on the parent's token and `file_is_owner_only`
+    answered differently for the same code path.
+
+    Reproduced deterministically by adding a stray rather than by hoping for a shell that emits
+    one, because a test that only fails under one terminal is not a test.
+    """
+    import subprocess  # nosec B404 - fixed argv, no shell, a path this test created
+    token = tmp_path / "token.json"
+    token.write_text("{}", encoding="utf-8")
+    subprocess.run(["icacls", str(token), "/grant", "Everyone:R"],  # nosec B603 B607
+                   capture_output=True, check=False)
+    assert auth.file_is_owner_only(str(token)) is False, "precondition: the stray is really there"
+
+    auth._harden(str(token))
+
+    assert auth.file_is_owner_only(str(token)) is True
+    assert auth._unexpected_principals(str(token)) == []
+
+
+def test_the_owners_own_logon_session_is_not_a_stray():
+    r"""The other half of the same finding, and the reason it is tolerated rather than removed.
+
+    `NT AUTHORITY\LogonSessionId_0_<id>` is `S-1-5-5-x-y`, held by exactly the processes of ONE
+    interactive logon of ONE user - strictly NARROWER than the owner, so it grants nothing the
+    owner does not already have, and the next logon gets a different SID so a stale ace grants
+    nothing at all. `icacls /remove:g` on that display name fails with 1332 ERROR_NONE_MAPPED
+    anyway; it does not resolve back to a SID.
+
+    Asserted directly rather than through a file, because whether one APPEARS depends on how the
+    process was launched - which is the very non-determinism this is here to absorb.
+    """
+    assert auth._strays(["NT AUTHORITY\\LogonSessionId_0_17444932"]) == []
+    assert auth._strays(["NT AUTHORITY\\SYSTEM", "BUILTIN\\Administrators"]) == []
+    assert auth._strays(["Everyone"]) == ["Everyone"]
+    assert auth._strays(["WINTOP\\someone-else"]) == ["WINTOP\\someone-else"]
+
+
 def test_file_is_owner_only_says_it_does_not_know_rather_than_guessing(tmp_path):
     """None is not False. A missing file cannot be reported as "not owner-only", because a
     caller acting on False would tighten something that is not there - and reporting unknown as

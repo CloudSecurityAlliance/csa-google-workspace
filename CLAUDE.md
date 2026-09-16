@@ -216,9 +216,27 @@ pytest -q --cov --cov-report=term-missing
 # Live API suite (real Google; opt-in). Needs a cached token or a first-run browser login:
 CSA_GW_INTEGRATION=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tests/integration/
 
-# Interactive OAuth suite (SEPARATE — needs a human + touches the sensitive cached token):
+# Interactive OAuth suite (SEPARATE — needs a human + touches the sensitive cached token).
+# EXPECT TWO CONSENTS on a fresh machine: read-only has had its own cache since #185, so a
+# read-write token is deliberately NOT reused — and the second prompt HANGS if nobody is looking.
 CSA_GW_OAUTH=1 CSA_GW_CLIENT_SECRETS=path/to/client_secret.json pytest tests/oauth/
 ```
+
+**POWERSHELL HAS NO INLINE `VAR=x cmd` PREFIX.** Every env-var line above is a bash-ism, and on
+Windows it fails with `The term 'CSA_GW_OAUTH=1' is not recognized as the name of a cmdlet`. Set
+them in the session instead, then run the command on its own line:
+
+```powershell
+$env:CSA_GW_OAUTH = "1"
+$env:CSA_GW_CLIENT_SECRETS = "$env:USERPROFILE\.csa_google_workspace\client_secret.json"
+.venv\Scripts\python.exe -m pytest tests/oauth -v
+Remove-Item Env:CSA_GW_OAUTH        # they persist for the whole session otherwise
+```
+
+This is worth stating because **the Bash tool available to an agent here is Git Bash**, where the
+bash form works perfectly — so the natural thing to hand a Windows user is a line the agent just
+ran successfully and they cannot run at all. Invariant 13's shape, in the documentation rather
+than the code.
 
 Three test tiers: **unit** (`tests/`, offline, gates CI) · **integration** (`tests/integration/`,
 real Google API, `CSA_GW_INTEGRATION=1`) · **oauth** (`tests/oauth/`, interactive browser

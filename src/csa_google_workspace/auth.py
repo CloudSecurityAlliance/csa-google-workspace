@@ -219,24 +219,75 @@ def file_is_owner_only(path: str) -> bool | None:
         return None
     if not _WINDOWS:
         return os.stat(path).st_mode & 0o077 == 0
+    acl = _read_acl(path)
+    if acl is None:
+        return None
+    principals, inherited = acl
+    if inherited:
+        return False                # an inherited ACE: the ACL is the directory's, not ours
+    if not principals:
+        return None                 # icacls said nothing we could read; unknown, not secure
+    return not _strays(principals)
+
+
+def _read_acl(path: str) -> tuple[list[str], bool] | None:
+    """(explicit principals, any inherited ACE) from icacls, or None if it could not be read.
+
+    One parser, because `file_is_owner_only` and `_harden` ask the same question of the same
+    output and a second copy is how they would drift apart.
+    """
     result = _icacls(path)
     if result.returncode != 0:
         return None
-    allowed = {_current_windows_principal().lower(),
-               *(p.lower() for p in _WINDOWS_ROOT_EQUIVALENTS)}
-    seen = False
-    for line in result.stdout.splitlines():
-        line = line.removeprefix(path).strip()
+    principals: list[str] = []
+    inherited = False
+    for raw in result.stdout.splitlines():
+        line = raw.removeprefix(path).strip()
         if not line or line.startswith("Successfully processed"):
             continue
         if "(I)" in line:
-            return False            # an inherited ACE: the ACL is the directory's, not ours
+            inherited = True
+            continue
         # `DOMAIN\user:(F)` - rsplit, because a principal itself contains no colon but a path
         # prefix would. Everything after the last colon is the rights mask.
-        if line.rsplit(":", 1)[0].strip().lower() not in allowed:
-            return False
-        seen = True
-    return True if seen else None
+        principals.append(line.rsplit(":", 1)[0].strip())
+    return principals, inherited
+
+
+def _is_own_logon_session(principal: str) -> bool:
+    r"""Is this the LOGON SESSION SID - the owner's own session, not a third party?
+
+    Windows puts `S-1-5-5-<x>-<y>` in the default DACL of files created by some processes, and
+    icacls displays it as `NT AUTHORITY\LogonSessionId_0_<id>`. Whether it appears depends on the
+    creating process's token: measured 2026-09-15 on one machine, a file created by a process
+    launched from PowerShell carries it and the same code from Git Bash does not.
+
+    **It is tolerated rather than removed, and the reason is what it identifies.** A logon session
+    SID is held by exactly the processes in ONE interactive logon of ONE user - it is strictly
+    NARROWER than "the owner", not wider, so it grants nothing the owner does not already have.
+    It also cannot outlive its usefulness to anyone else: the next logon gets a different SID, so
+    a stale ace grants nothing at all.
+
+    And it could not be removed even if we wanted to. `icacls /remove:g` on that display name
+    fails with **1332, ERROR_NONE_MAPPED** - the name does not resolve back to a SID - which is
+    itself the evidence that it is not an ordinary principal. Trying and failing silently is what
+    this codebase calls a fallback that drops the property (CLAUDE.md invariant 12), so the
+    decision is made explicitly here instead.
+    """
+    return principal.upper().startswith("NT AUTHORITY\\LOGONSESSIONID_")
+
+
+def _strays(principals: list[str]) -> list[str]:
+    """Principals on the ACL that are neither the owner, a root-equivalent, nor its own session."""
+    allowed = {_current_windows_principal().lower(),
+               *(p.lower() for p in _WINDOWS_ROOT_EQUIVALENTS)}
+    return [p for p in principals
+            if p.lower() not in allowed and not _is_own_logon_session(p)]
+
+
+def _unexpected_principals(path: str) -> list[str]:
+    acl = _read_acl(path)
+    return _strays(acl[0]) if acl else []
 
 
 def _harden(path: str, fd: int | None = None) -> None:
@@ -249,6 +300,20 @@ def _harden(path: str, fd: int | None = None) -> None:
     """
     if _WINDOWS:
         result = _icacls(path, "/inheritance:r", "/grant:r", f"{_current_windows_principal()}:F")
+        # AND THEN REMOVE WHATEVER ELSE IS THERE. `/inheritance:r` drops only INHERITED aces and
+        # `/grant:r` replaces only the ace for the principal named, so anything explicit that
+        # Windows itself put on the file SURVIVES BOTH. The process default DACL is the source:
+        # launched from PowerShell a new file carries `NT AUTHORITY\LogonSessionId_0_<id>:(RX)`,
+        # launched from Git Bash it does not. Measured 2026-09-15, same machine, same code.
+        #
+        # So without this the resulting ACL depended on which shell started the process - and a
+        # security mechanism whose outcome varies with the parent's token is not one. Removing
+        # the strays makes `_harden` deterministic, which is the property being bought here.
+        # SYSTEM and Administrators are left alone: excluding them stops nothing (an admin takes
+        # ownership, exactly as root reads a 0o600 file) and removing SYSTEM breaks backup and AV.
+        if result.returncode == 0:
+            for principal in _unexpected_principals(path):
+                _icacls(path, "/remove:g", principal)
         if result.returncode != 0:
             # Warn rather than refuse: failing the write would leave a user unable to log in at
             # all because an ACL tool was unavailable, and they would still have no token. The
