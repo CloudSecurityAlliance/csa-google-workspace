@@ -1,6 +1,6 @@
 # INTERFACE-RESOURCES.md — csa-google-workspace
 
-**Last verified:** 2026-09-06 (v0.52.0)
+**Last verified:** 2026-09-15 (v0.53.0)
 **Scope:** Interfaces this repo exposes to callers, and first-party interfaces it
 consumes. Third-party Python dependencies live in `pyproject.toml`; the Google
 API surfaces this library wraps are third-party and are not listed here.
@@ -30,7 +30,7 @@ it means installing it and importing it.
   credentials (BYO `google.oauth2` credentials, or the bundled OAuth helper)
 - **Code:** [`src/`](src/)
 - **Status:** production — feature-complete for its scoped roadmap and
-  live-verified end-to-end against real Google. Current release **v0.52.0**;
+  live-verified end-to-end against real Google. Current release **v0.53.0**;
   the MCP server below arrived in v0.2.2. Classifier still reads
   `Development Status :: 4 - Beta`.
 
@@ -110,7 +110,7 @@ it means installing it and importing it.
   persists that stream for you), `CSA_GW_FLAVOUR=google|claude` (publish only that
   vendor's Drive tool surface). Full reference: `csa-gw://help/configuration`.
 - **Protocol:** MCP revision `2026-07-28`; requires SDK `mcp>=2.1`.
-- **Status:** **shipped**, v0.2.0 onward (2026-08-24); current release v0.52.0.
+- **Status:** **shipped**, v0.2.0 onward (2026-08-24); current release v0.53.0.
 - **Design:** [`docs/superpowers/specs/2026-07-23-mcp-server-design.md`](./docs/superpowers/specs/2026-07-23-mcp-server-design.md)
 - **Health check** — no credentials needed; lists the tool surface over real stdio.
   The request must be on **one line**: stdio framing is newline-delimited, so a
@@ -133,7 +133,8 @@ Not an interface this repo exposes, but the deployment path worth recording
 alongside it: CSA members get this via
 [`DesktopSetup`](https://github.com/CloudSecurityAlliance/desktopSetup), which
 gh-probes `CloudSecurityAlliance-Internal/CSA-Plugins` and runs
-`internal-setup/csa-google-workspace-setup.sh` from there. That private repo
+`internal-setup/csa-google-workspace-setup.{sh,ps1}` from there - the PowerShell
+counterpart is how Windows members get it. That private repo
 carries CSA's Internal OAuth client, which cannot live in a public repo (Google's
 API ToS forbid embedding developer credentials in open source). Non-members get a
 404 from the probe and see nothing.
