@@ -202,8 +202,18 @@ function Invoke-Layer {
     Section "$(Format-LayerId $Id) - $Desc"
     Write-Log "`$ $($Command -join ' ')"
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    & $Command[0] @($Command[1..($Command.Count - 1)]) 2>&1 | ForEach-Object { Write-Log ($_ | Out-String).TrimEnd() }
-    $code = $LASTEXITCODE
+    # ErrorActionPreference RELAXED around every native call, and this is not cosmetic.
+    # Windows PowerShell 5.1 turns a native command's STDERR into an ErrorRecord, so under
+    # `Stop` the first line any tool writes to stderr becomes a TERMINATING error and kills the
+    # whole run. `scripts/check_doc_claims.py` writes an allowlist warning there and did exactly
+    # that. pwsh 7 does not do this - so it was invisible in every run made while writing this
+    # script, which were all pwsh 7. The exit code is the verdict here, never the stream.
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $Command[0] @($Command[1..($Command.Count - 1)]) 2>&1 | ForEach-Object { Write-Log ($_ | Out-String).TrimEnd() }
+        $code = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $prevEap }
     $sw.Stop()
     $took = '{0:n0}s' -f $sw.Elapsed.TotalSeconds
     if ($code -eq 0) {
@@ -238,6 +248,9 @@ Say ("  read-write token: {0}" -f $(if ($HasRw) { 'present' } else { 'ABSENT - r
 Say ("  read-only token : {0}" -f $(if ($HasRo) { 'present' } else { 'absent - L2-RO will skip' }))
 Say ("  layers requested: {0}" -f ($Wanted -join ','))
 Say ("  version under test: {0}" -f $Version)
+# Which EDITION is running matters enough to record: 5.1 and 7 differ on stderr handling,
+# on BOM-less file encoding, and on native-argument quoting. All three bit this script.
+Say ("  powershell      : {0} ({1})" -f $PSVersionTable.PSVersion, $PSVersionTable.PSEdition)
 
 $Py = Resolve-Interpreter
 if (-not $Py) { Say ''; Say "Stopped: no usable interpreter. See $LogFile" 'Red'; exit 2 }
@@ -259,7 +272,9 @@ print("python          :", sys.version.split()[0])
 print("read_client_secrets present :", hasattr(auth, "read_client_secrets"))
 print("file_is_owner_only present  :", hasattr(auth, "file_is_owner_only"))
 '@ | Set-Content -Path $probeFile -Encoding ascii
-& $Py $probeFile 2>&1 | ForEach-Object { Say ("  " + ($_ | Out-String).TrimEnd()) }
+$prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+try { & $Py $probeFile 2>&1 | ForEach-Object { Say ("  " + ($_ | Out-String).TrimEnd()) } }
+finally { $ErrorActionPreference = $prevEap }
 try {
     $sha = (& git rev-parse --short HEAD 2>$null)
     $dirty = (& git status --porcelain 2>$null)
