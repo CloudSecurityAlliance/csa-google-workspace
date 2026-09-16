@@ -17,7 +17,6 @@ that token and does NOT prompt a second time.
 Never commit `client_secret.json` or `token*.json` — both are gitignored.
 """
 import os
-import stat
 
 import pytest
 
@@ -53,14 +52,24 @@ def test_from_oauth_login_then_reaches_google():
 
 
 def test_oauth_token_file_not_group_or_world_accessible():
-    """auth.py must persist the token with no group/other access, in a private dir."""
-    from csa_google_workspace import Workspace
+    """auth.py must persist the token with no group/other access, in a private dir.
+
+    Asked through `auth.file_is_owner_only` rather than `st_mode & 0o077`, because that mask is
+    the POSIX SPELLING of the question and this suite is the one place a REAL token gets written.
+    On Windows `st_mode` reports 0o666 whatever the file's actual ACL is, so the mask version
+    failed on a token that was correctly protected - reporting "your credential is exposed" about
+    a file that was not, in the suite a person runs precisely to check that. (#451, #453)
+
+    This suite is gated behind CSA_GW_OAUTH=1, so it was missed when the unit tests were
+    converted; nothing unattended could have caught it.
+    """
+    from csa_google_workspace import Workspace, auth
     Workspace.from_oauth(_secrets())                 # ensure a token has been written
     assert os.path.exists(DEFAULT_TOKEN), "expected a cached token after from_oauth()"
-    file_mode = stat.S_IMODE(os.stat(DEFAULT_TOKEN).st_mode)
-    dir_mode = stat.S_IMODE(os.stat(os.path.dirname(DEFAULT_TOKEN)).st_mode)
-    assert file_mode & 0o077 == 0, f"token readable by group/other: {oct(file_mode)}"
-    assert dir_mode & 0o077 == 0, f"token dir accessible by group/other: {oct(dir_mode)}"
+    assert auth.file_is_owner_only(DEFAULT_TOKEN) is True, (
+        "the cached token is readable beyond its owner")
+    assert auth.file_is_owner_only(os.path.dirname(DEFAULT_TOKEN)) is True, (
+        "the token's directory is accessible beyond its owner")
 
 
 def test_read_only_oauth_session_reads_but_refuses_writes():
