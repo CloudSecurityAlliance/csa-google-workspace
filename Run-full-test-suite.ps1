@@ -53,6 +53,10 @@
 .PARAMETER Check
     Report prerequisites and credentials, run no layers.
 
+.PARAMETER Quiet
+    Do not echo layer output to the console; the log still gets everything. For an unattended
+    run. Interactively the echo is what tells you a two-minute layer is alive rather than hung.
+
 .PARAMETER SelfTest
     Exercise the log redactor against known secrets and exit. The redactor is what makes this
     log safe to hand to somebody, so it is not left as a check that has never failed.
@@ -67,15 +71,17 @@
     .\Run-full-test-suite.ps1 -Offline
     .\Run-full-test-suite.ps1 -Interactive
     .\Run-full-test-suite.ps1 -Version latest -Layers 1,3
+    .\Run-full-test-suite.ps1 -Quiet            # unattended; the log still gets everything
 #>
 [CmdletBinding()]
 param(
     [string]   $Version = 'tree',
-    [string]   $Layers,
+    [string[]] $Layers,
     [switch]   $Interactive,
     [switch]   $SecondConsent,
     [switch]   $Offline,
     [switch]   $Check,
+    [switch]   $Quiet,
     [switch]   $SelfTest,
     [string]   $LogDir = (Join-Path $env:USERPROFILE '.csa_gw_rig')
 )
@@ -87,9 +93,12 @@ Set-Location $RepoDir
 # --- layer selection --------------------------------------------------------------------------
 $DefaultLayers = 'lint,types,docs,index,1,2,2ro,3,4,5'
 $OfflineLayers = 'lint,types,docs,index,1,3'
-if (-not $Layers) { $Layers = if ($Offline) { $OfflineLayers } else { $DefaultLayers } }
-if ($Interactive -and $Layers -notmatch '(^|,)6(,|$)') { $Layers = "$Layers,6" }
-$Wanted = $Layers.Split(',') | ForEach-Object { $_.Trim().ToLower() } | Where-Object { $_ }
+# [string[]] so `-Layers 1,3` and `-Layers "1,3"` both work: PowerShell binds the unquoted form
+# as an array, which a [string] parameter refuses outright - and the unquoted form is the one
+# anybody types, including this file's own examples.
+if (-not $Layers) { $Layers = @(if ($Offline) { $OfflineLayers } else { $DefaultLayers }) }
+$Wanted = @($Layers) -join ',' -split ',' | ForEach-Object { $_.Trim().ToLower() } | Where-Object { $_ }
+if ($Interactive -and $Wanted -notcontains '6') { $Wanted += '6' }
 
 # --- log --------------------------------------------------------------------------------------
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
@@ -183,6 +192,9 @@ function Resolve-Interpreter {
 }
 
 # --- layer runner -----------------------------------------------------------------------------
+# Rough costs on a developer machine, so a long quiet layer reads as expected rather than stuck.
+$LayerCost = @{ '1' = '~2min'; '2' = '~1min'; '5' = '~3min'; '2ro' = '~10s'; '4' = '~15s' }
+
 function Test-Wanted([string]$Id) { return $Wanted -contains $Id.ToLower() }
 
 # `L` is the sh rig's prefix for its NUMBERED layers. The named ones here are additions, not
@@ -200,6 +212,7 @@ function Invoke-Layer {
     param([string]$Id, [string]$Desc, [string[]]$Command)
     if (-not (Test-Wanted $Id)) { return }
     Section "$(Format-LayerId $Id) - $Desc"
+    if ($LayerCost.ContainsKey($Id)) { Say ("  (usually {0})" -f $LayerCost[$Id]) 'DarkGray' }
     Write-Log "`$ $($Command -join ' ')"
     $sw = [Diagnostics.Stopwatch]::StartNew()
     # ErrorActionPreference RELAXED around every native call, and this is not cosmetic.
@@ -211,7 +224,16 @@ function Invoke-Layer {
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        & $Command[0] @($Command[1..($Command.Count - 1)]) 2>&1 | ForEach-Object { Write-Log ($_ | Out-String).TrimEnd() }
+        # OUTPUT IS ECHOED LIVE, not just logged. L1 is ~2 minutes of work and used to produce
+        # ZERO console output while it ran, which is indistinguishable from a hang - and was
+        # reported as one. A rig that looks dead gets killed by the person running it, so the
+        # cheapest possible progress signal is the real output, redacted on the way past.
+        # `-Quiet` restores the silent behaviour for an unattended run.
+        & $Command[0] @($Command[1..($Command.Count - 1)]) 2>&1 | ForEach-Object {
+            $line = ($_ | Out-String).TrimEnd()
+            Write-Log $line
+            if (-not $Quiet -and $line) { Write-Host ('    ' + (Protect-Line $line)) -ForegroundColor DarkGray }
+        }
         $code = $LASTEXITCODE
     } finally { $ErrorActionPreference = $prevEap }
     $sw.Stop()
