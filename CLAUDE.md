@@ -180,7 +180,15 @@ recommended elsewhere, since it installs Claude Code, `gh`, Python, git and pipx
 Then `./Setup-test-machine.sh` sets a dedicated Mac up once (tooling, install, MCP registration, **both** Google consents, Playwright);
 `./Run-full-test-suite.sh` then runs the layers unattended against **the current PyPI release**.
 Read spec §3 before touching either — `pythonpath = ["src"]` silently shadows the installed
-wheel, so the obvious implementation tests the checkout while reporting the release. The repo
+wheel, so the obvious implementation tests the checkout while reporting the release.
+
+**On Windows, `Run-full-test-suite.ps1`** — a sibling, not a fork: the layer ids mean what they
+mean in the sh rig, which **refuses to run here** (it is zsh, and the rig is specified as a Mac).
+One command, one redacted log, path printed at the end. Two deliberate differences: `-Version`
+defaults to `tree` rather than the published wheel, because the question a Windows developer has
+mid-change is "does my working tree work"; and nothing in a bare run can block, so L6 needs
+`-Interactive`. `-SelfTest` exercises the log redactor, which removes home, username **and Drive
+file ids** — an id is a working link to a document, and this log exists to be handed to somebody. The repo
 also **denies the claude.ai Google Drive connector** (`.claude/settings.json`), because a second
 Drive client answers questions meant for this server and defeats the policy ceiling.
 
