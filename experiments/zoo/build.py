@@ -84,8 +84,25 @@ def find_or_make(drive, name: str, parent: str, drive_id: str, mime: str) -> tup
     return made["id"], True
 
 
-def write_body(docs, file_id: str, text: str) -> None:
-    """Insert the text, then style the headings.
+# Material that has to be real STRUCTURE, not prose that describes structure. `docs-structure`
+# asked for a comment on a heading and a comment on a table cell, and the document contained
+# neither: "Section Two" was NORMAL_TEXT and there were ZERO tables in it (found 2026-09-08,
+# by trying to follow the specimen's own instructions). A specimen that cannot be used the way
+# it tells you to use it is worse than a missing one — you go looking for your own mistake.
+#
+# Keyed by specimen name -> lines in `material` that must become real headings.
+MATERIAL_HEADINGS = {
+    "docs-structure": ["Section Two"],
+}
+
+# Specimens needing a real table appended to their material, with its contents.
+MATERIAL_TABLES = {
+    "docs-structure": [["Region", "Q3 actual"], ["Southwest", "388000"], ["Northeast", "412000"]],
+}
+
+
+def write_body(docs, file_id: str, text: str, name: str = "") -> None:
+    """Insert the text, then style the headings and add any structural material.
 
     One insert at index 1, so a character offset in `text` is simply `1 + offset` — reliable
     arithmetic, unlike inserting paragraph by paragraph and tracking a moving cursor.
@@ -106,9 +123,61 @@ def write_body(docs, file_id: str, text: str) -> None:
     requests.append({"updateParagraphStyle": {
         "range": {"startIndex": 1, "endIndex": 1 + len(first)},
         "paragraphStyle": {"namedStyleType": "TITLE"}, "fields": "namedStyleType"}})
+    # Material headings, styled the same way as the section headings above.
+    #
+    # Matched as a WHOLE LINE. A bare `text.find(heading)` styled the wrong paragraph: the
+    # by_hand instruction reads "- Comment on the heading 'Section Two' below.", which occurs
+    # FIRST, so the instruction became the heading and the material stayed plain. Section
+    # headings escape this only because their names happen to be unique in the document.
+    for heading in MATERIAL_HEADINGS.get(name, []):
+        at = text.find(f"\n{heading}\n")
+        if at < 0:
+            continue
+        at += 1                                    # past the leading newline
+        requests.append({"updateParagraphStyle": {
+            "range": {"startIndex": 1 + at, "endIndex": 1 + at + len(heading)},
+            "paragraphStyle": {"namedStyleType": "HEADING_2"},
+            "fields": "namedStyleType"}})
     if requests:
         docs.documents().batchUpdate(documentId=file_id,
                                      body={"requests": requests}).execute()
+
+    # The table goes in LAST and at the END, in its own call. Inserting it earlier would shift
+    # every offset the heading styling above depends on, and `insertTable` returns no id, so
+    # the only reliable way to fill it is to re-read the document and address the cells by the
+    # indices Docs assigned.
+    rows = MATERIAL_TABLES.get(name)
+    if rows:
+        _append_table(docs, file_id, rows)
+
+
+def _append_table(docs, file_id: str, rows: list[list[str]]) -> None:
+    """Append a real table and fill it, addressing cells by re-read indices.
+
+    Filling it needs the SECOND read: `insertTable` reports nothing about where the cells
+    landed, and cell start indices are not derivable from the table's own start — an empty
+    cell still occupies indices, and they shift as earlier cells are filled. So the writes go
+    in REVERSE document order, which keeps every not-yet-written index valid.
+    """
+    doc = docs.documents().get(documentId=file_id, fields="body(content(endIndex))").execute()
+    end = (doc.get("body", {}).get("content") or [{}])[-1].get("endIndex", 2)
+    docs.documents().batchUpdate(documentId=file_id, body={"requests": [
+        {"insertText": {"location": {"index": end - 1}, "text": "\n"}},
+        {"insertTable": {"rows": len(rows), "columns": len(rows[0]),
+                         "location": {"index": end}}}]}).execute()
+
+    doc = docs.documents().get(documentId=file_id, includeTabsContent=True).execute()
+    body = doc["tabs"][0]["documentTab"]["body"] if "tabs" in doc else doc["body"]
+    table = [el for el in body["content"] if "table" in el][-1]["table"]
+
+    cells = []
+    for r, row in enumerate(table["tableRows"]):
+        for c, cell in enumerate(row["tableCells"]):
+            para = [x for x in cell["content"] if "paragraph" in x][0]
+            cells.append((para["startIndex"], rows[r][c]))
+    requests = [{"insertText": {"location": {"index": i}, "text": t}}
+                for i, t in sorted(cells, reverse=True)]          # reverse: indices stay valid
+    docs.documents().batchUpdate(documentId=file_id, body={"requests": requests}).execute()
 
 
 def api_comments(drive, file_id: str, spec: dict) -> list[str]:
@@ -170,7 +239,7 @@ def main() -> int:
                 docs.documents().batchUpdate(documentId=readme, body={"requests": [
                     {"deleteContentRange": {"range": {"startIndex": 1,
                                                       "endIndex": end - 1}}}]}).execute()
-        write_body(docs, readme, README)
+        write_body(docs, readme, README, "README")
     print(f"  {'created' if made else 'exists ':<8} {'README':<26} {readme}\n")
 
     manifest = []
@@ -190,7 +259,7 @@ def main() -> int:
                     docs.documents().batchUpdate(documentId=fid, body={"requests": [
                         {"deleteContentRange": {"range": {"startIndex": 1,
                                                           "endIndex": end - 1}}}]}).execute()
-            write_body(docs, fid, text)
+            write_body(docs, fid, text, name)
         cids = api_comments(drive, fid, spec) if (args.comments and (created or args.rewrite)) else []
         print(f"  {'created' if created else 'exists ':<8} {name:<26} {fid}"
               f"{'  +' + str(len(cids)) + ' comments' if cids else ''}")

@@ -58,7 +58,7 @@ all rejected as *unknown fields*, identically to a made-up control.
 | question | status | source |
 |---|---|---|
 | Comment with nothing selected → anchor expands to the enclosing word | MEASURED 2026-09-02 | `docs-anchor-states/` |
-| Comment on an empty paragraph → editor **refuses**, no box appears | MEASURED 2026-09-02 | `docs-anchor-states/` |
+| Comment on an empty paragraph → editor **refuses**, no box appears | MEASURED 2026-09-02, again 2026-09-08 | `docs-anchor-states/`; re-confirmed on `docs-structure` — `#insertCommentButton` is `aria-disabled` and `⌘+Option+M` opens no draft |
 | Comment on an inline image → anchor present, no quoted text | MEASURED 2026-09-02 | `docs-anchor-states/` |
 | **The `object` state needs no image** — anchoring to any non-textual part of a page gives an anchor with no quoted text | MEASURED 2026-09-03 | `experiments/zoo/` |
 | The editor CAN be driven by automation; canvas rendering does not prevent it | MEASURED 2026-09-03 | `zoo/AUTOMATING-THE-EDITOR.md` — the recipe, and the `aria-disabled` selection oracle |
@@ -69,7 +69,8 @@ all rejected as *unknown fields*, identically to a made-up control.
 | A comment reusing a **real** `kix.*` anchor renders as properly anchored | MEASURED 2026-09-03 | `api-created-comment-states/` |
 | `quotedFileContent` is displayed **verbatim** beside a valid anchor, unvalidated | MEASURED 2026-09-03 | `api-created-comment-states/` |
 | Comment across a paragraph boundary — anchor is an ordinary `kix.*`, quote contains a literal `\n` | MEASURED 2026-09-05 | zoo `docs-sloppy-selections`; `_context` returns `kind: spanning` correctly against it |
-| Comment in a **table cell** — from the editor | **UNKNOWN** | probe written, state never placed |
+| Comment in a **table cell** — from the editor | MEASURED 2026-09-08 | zoo `docs-structure`; ordinary `kix.*` anchor, and `_context` returns `kind: table` with the WHOLE table as the passage |
+| Comment on a real **heading** — from the editor | MEASURED 2026-09-08 | ditto; `_context` returns `kind: heading_and_following`, and `heading_path` carries the heading itself |
 | How a **resolved** thread renders, and whether resolve-by-API differs | **UNKNOWN** | — |
 | **@mention** populates `mentionedEmailAddresses`; **assignment** populates `assigneeEmailAddress` **as well as** the mention | MEASURED 2026-09-05 | an assignment IS a mention plus a checkbox — both fields set together |
 | **Resolving does NOT clear the assignee** | MEASURED 2026-09-05 | a resolved thread keeps `assigneeEmailAddress`, so "assigned to X" does not mean outstanding |

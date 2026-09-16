@@ -234,8 +234,14 @@ SPECIMENS: dict[str, dict] = {
               "into the prose it heads, not backward.",
               "A cell in the table, once commented on — context should be the whole table.",
               "The empty paragraph. Try to comment on it; the editor will not let you."],
-        by_hand=["Comment on the heading 'Section Two' below.",
-                 "Comment on a cell inside the table.",
+        # AN INSTRUCTION MUST NOT QUOTE THE MATERIAL VERBATIM. This line used to read
+        # "Comment on the heading 'Section Two' below", which put that exact string in the
+        # document TWICE - so a comment on the real heading came back `ambiguous`, because a
+        # Docs anchor carries no position and quoted text is the only way to locate one.
+        # The instruction destroyed the uniqueness the material exists to provide. Refer to
+        # material by its ROLE, never by its text.
+        by_hand=["Comment on the material heading below (the one directly above P1).",
+                 "Comment on a cell inside the table at the end.",
                  "Try to comment on the empty paragraph between P1 and P2, and confirm no "
                  "comment box appears. That refusal is the finding."],
         material=["Section Two",

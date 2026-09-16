@@ -54,6 +54,23 @@ Two things about that file differ from every other specimen, both forced rather 
   clip overflow — it draws it outside the slide, so one long README *looks* right in the editor
   and silently loses its last third in presentation and thumbnail views.
 
+**`docs-structure` could not be used the way it told you to, until 2026-09-08.** It asked for a
+comment on a heading and a comment on a table cell, and the document contained **neither** —
+"Section Two" was `NORMAL_TEXT` and there were **zero** tables in it. The builder only ever
+styled the section headings and never created structural material. Found by trying to follow the
+instructions.
+
+Two rules came out of fixing it, and both are general:
+
+* **Material that a rule is about has to BE that structure**, not prose describing it. A
+  specimen for headings and tables needs a real `HEADING_2` and a real table, or the rule it
+  exists to exercise cannot be exercised.
+* **An instruction must never quote the material verbatim.** The line
+  *"Comment on the heading 'Section Two' below"* put that string in the document **twice**, so a
+  comment on the real heading came back `ambiguous` — a Docs anchor carries no position, and
+  quoted text is the only way to locate one. The instruction destroyed the uniqueness the
+  material exists to provide. Refer to material by its **role**.
+
 ## What the script can and cannot do
 
 It places the comments **only the API can make** — file-level, and quote-only. Everything else
