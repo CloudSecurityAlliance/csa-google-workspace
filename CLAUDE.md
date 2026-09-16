@@ -192,6 +192,33 @@ file ids** — an id is a working link to a document, and this log exists to be 
 also **denies the claude.ai Google Drive connector** (`.claude/settings.json`), because a second
 Drive client answers questions meant for this server and defeats the policy ceiling.
 
+### RUN IT ON WINDOWS BEFORE YOU CUT A RELEASE — nothing else will
+
+```powershell
+git pull
+.\Run-full-test-suite.ps1          # ~7min; expect 10 passed, 0 failed, 0 skipped
+```
+
+**`git pull` first is not boilerplate.** The rig defaults to `-Version tree`, so it tests the
+checkout in front of it — a stale one passes happily and tells you nothing about what is about to
+ship.
+
+**Why this is a manual step and stays one for now.** CI is `ubuntu-latest` only (invariant 13), so
+no automation covers the platform a large share of Claude Desktop users are on. Adding a
+`windows-latest` leg is tracked in #453 and is the right answer; until it lands, *this command is
+the only thing standing between a POSIX assumption and a release*. **Zero skips is the bar** — a
+skipped layer asserted nothing, and the one that skips without a read-only token (L2-RO) is
+precisely the one proving **Google** refuses a write rather than our own guard refusing it:
+
+```powershell
+$env:CSA_GW_READ_ONLY = "1"; .venv\Scripts\csa-google-workspace-mcp.exe login; Remove-Item Env:CSA_GW_READ_ONLY
+```
+
+This is not hypothetical diligence. The first time anyone did it — 2026-09-15, for v0.53.0 — it
+found **33 failures and two security defects**, including an OAuth-token hardening that had been a
+silent no-op on Windows for the life of the project while `THREAT_MODEL.md` T5 cited it as a
+mitigation.
+
 ```bash
 pip install -e ".[dev]"        # install (src/ layout, Python >=3.10)
                                 # CI does NOT install this way - it installs the hash-pinned
@@ -356,7 +383,8 @@ around it quietly.
 
 Publishing is automated via **PyPI Trusted Publishing (OIDC)** — never `twine upload` by hand. **A version bump means carrying it through to PyPI**, including approving the protected `pypi` environment gate — a staged release helps nobody. And **a security audit opens a new minor** (`x.y.0`), with subsequent batches of fixes from that same audit as patches (`x.y.1`, `x.y.2`), so the version says how far through remediation a release is. Both rules, with the approval command and the CDN-lag gotcha: [`RELEASING.md`](RELEASING.md).
 
-1. **Bump `__version__`** in `src/csa_google_workspace/__init__.py` (the single source of truth; `pyproject.toml` reads it dynamically) and add a dated `CHANGELOG.md` entry — via the normal **branch + PR**, merged to `main` first.
+0. **`git pull` and run `.\Run-full-test-suite.ps1` on Windows** — expect **0 failed, 0 skipped**. Green CI is not this step: CI is `ubuntu-latest` only, so it has never seen the platform most Desktop users run. See *"Run it on Windows before you cut a release"* above for why this is manual, and #453 for making it not be.
+1. **Bump `__version__`** in `src/csa_google_workspace/__init__.py` (the single source of truth; `pyproject.toml` reads it dynamically) and add a dated `CHANGELOG.md` entry — via the normal **branch + PR**, merged to `main` first. A bump also means checking `INTERFACE-RESOURCES.md`'s **body**, not only its date — it carried a `v0.2.3` claim through thirty-five releases under a repeatedly refreshed "Last verified" line.
 2. **`gh release create vX.Y.Z`** creates the git tag + GitHub Release. **Publishing the Release** triggers `.github/workflows/release.yml`, which runs the suite, builds sdist+wheel, `twine check`s, and uploads to PyPI over OIDC (no token).
 3. **Verify:** `https://pypi.org/project/csa-google-workspace/` shows the new version; `pip install csa-google-workspace` in a clean venv.
 
