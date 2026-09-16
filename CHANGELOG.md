@@ -10,6 +10,74 @@
 > keeps this file honest; `scripts/check_release_history.py` reconciles it against git tags and
 > PyPI itself.
 
+## 2026-09-15 — v0.53.0 (a first Windows run, and what it found) — not released *(yet — flipped once PyPI confirms)*
+
+**Nothing changes for a caller on macOS or Linux.** Every behavioural fix here is Windows-only,
+and that is the point: this repository had never run its own test suite on Windows, and one
+afternoon of doing so produced **33 failures and two security defects** — none of which CI could
+see, because CI is `ubuntu-latest` only while the deployment target is Claude Desktop/Code.
+
+### Two security fixes, and they are the same defect twice
+
+**The OAuth token's hardening was a no-op on Windows (#451).** `_write_token` protects a
+self-sufficient, indefinitely valid, full-Drive refresh token three ways. All three did nothing:
+
+    os.chmod(token_dir, 0o700)                    # Windows honours only the read-only bit
+    os.open(..., getattr(os, "O_NOFOLLOW", 0))    # O_NOFOLLOW does not exist -> the flag is 0
+    os.fchmod(fd, 0o600)                          # mode stays 0o666
+
+`THREAT_MODEL.md` **T5** cites those exact three mechanisms as its mitigation, so on Windows the
+evidence for its `partially_mitigated` rating did not hold. The amendment is proposed in #452
+rather than edited in, per this repository's rule that an audit files an issue.
+
+What was protecting the file was NTFS inheritance from the user profile — real, but not ours, and
+absent wherever `CSA_GW_TOKEN` points outside the profile. `auth._harden()` now applies an
+explicit owner-only ACL, and `auth.file_is_owner_only()` asks a platform-agnostic **question**
+instead of asserting `0o600` — which is the POSIX *answer*, and hard-coding it is exactly how the
+gap survived: the assertion kept passing on Linux and kept meaning nothing on Windows.
+
+**The Claude Desktop config had the identical hole (#458)** — in the file that is a *map* to the
+credential above. It carries `CSA_GW_TOKEN` and the allowlisted URLs, and `_restrict` was a bare
+`path.chmod(0o600)` whose docstring conceded "a filesystem without POSIX modes" as though that
+were hypothetical. Until now, on Windows, both the credential and the map to it were unprotected
+for the same reason and neither said so. One `_harden` serves both.
+
+A third round found `_harden` itself was **shell-dependent**: `icacls /inheritance:r /grant:r`
+leaves an explicit ace the process default DACL put there, so a file created from PowerShell and
+one created from Git Bash got different ACLs. A security predicate whose answer varies with the
+parent process is not one.
+
+### `login` failed on a client-secrets file carrying a UTF-8 BOM (#449)
+
+A BOM is legal in UTF-8 and `Set-Content -Encoding utf8` emits one under Windows PowerShell 5.1
+but not under 7. `google_auth_oauthlib` opens the file with no `encoding=`, so a perfectly valid
+file failed with `Expecting value: line 1 column 1 (char 0)` — naming neither the path nor what
+was being read.
+
+`auth.read_client_secrets()` now opens it (`utf-8-sig`) and every failure names the file, says
+what it is for, and keeps the parse detail. There were **three** readers, not one, and the third
+did something worse than crash: `_login._client_id_of` caught `ValueError`, `JSONDecodeError`
+subclasses it, so a BOM silently disabled the *"this cached token came from a different OAuth
+client"* warning.
+
+### `installed_via` knows what `uv tool` is (#447)
+
+CSA standardised on uv (DEC-012). A uv tool venv lives under `site-packages` like any other, so a
+problem report said `pip (venv)` and sent the reader hunting for a cross-project pin that cannot
+exist in an isolated venv.
+
+### The suite passes on Windows, and there is one command to run it
+
+`Run-full-test-suite.ps1` (#461) — a sibling of the sh rig, which refuses to run on Windows. One
+command, one log, the path printed at the end. The log redacts home, username **and Drive file
+ids**, because an id is a working link to a document and this log exists to be handed to
+somebody; `-SelfTest` proves the redactor works. #463 tracks bringing the macOS rig to match.
+
+### Dependencies
+
+`mcp` 2.1.1 → 2.2.0 (#442). All five SDK facts in `CLAUDE.md` still hold, re-checked by the
+five-Python matrix including the wire-protocol tests.
+
 ## 2026-09-06 — v0.52.0 (the live suite can run, and there is a machine to run it on)
 
 **One new thing for callers: `Slide.object_id`.** Everything else is the testing apparatus —
