@@ -21,6 +21,19 @@ updates:
   #
   # `.github/workflows/relock.yml` took that job over. Dependabot keeps watching pyproject.toml,
   # which is what it is actually good at - advisories against declared ranges.
+  #
+  # NOT LISTING IT DID NOT STOP IT. On 2026-09-15, PR #456 arrived editing `requirements/build.in`,
+  # `build.txt` and `dev.txt` anyway - "across 1 directory", i.e. Dependabot discovered them on its
+  # own. And it was worse than #225: as well as an unsatisfiable `pydantic-core` bump it RESOLVED
+  # THE UNIVERSAL LOCK FOR ITS OWN ENVIRONMENT, stripping the environment markers from 17 packages
+  # and deleting `colorama ; os_name == 'nt'` and `pywin32-ctypes` outright - two Windows-only
+  # dependencies, removed, in the file the release job installs from.
+  #
+  # So this comment is a statement of intent, not a control. The control is
+  # `tests/test_lockfiles.py::TestTheUniversalLockKeepsItsEnvironmentMarkers`, which fails on that
+  # exact shape (17 markers -> 0) and fails the same way for a hand-edit. If these PRs keep
+  # arriving, the next lever is dropping the `pip` entry entirely - which costs advisory coverage
+  # of the pyproject ranges, so it is a trade rather than a fix. Tracked in #467.
   - package-ecosystem: pip
     directory: /
     schedule:

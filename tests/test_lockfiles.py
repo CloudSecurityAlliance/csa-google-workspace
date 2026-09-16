@@ -323,3 +323,55 @@ class TestDependabotDoesNotTouchTheLockfiles:
         assert "uv" in pins(lock("uv.txt"))
         assert "--require-hashes -r requirements/uv.txt" in self.RELOCK.read_text(
             encoding="utf-8")
+
+
+class TestTheUniversalLockKeepsItsEnvironmentMarkers:
+    r"""A `--universal` lock is ONE file for every platform, and the markers are what make that
+    work. Strip them and the file still parses, still has hashes, and still passes every other
+    test in this module - while installing Linux-only packages on Windows and, worse, DROPPING
+    the entries that only apply somewhere else.
+
+    Not hypothetical. Dependabot PR #456 (2026-09-15) proposed exactly this against
+    `requirements/build.txt` while bumping one version:
+
+        - colorama==0.4.6 ; os_name == 'nt'                       <- removed entirely
+        - cffi==2.1.1 ; ... and sys_platform == 'linux'     ->   + cffi==2.1.1
+        - backports-tarfile==1.2.0 ; python_full_version < '3.12' -> + backports-tarfile==1.2.0
+
+    It resolved the lock for ITS OWN environment and flattened the result. `requirements/README.md`
+    already says why that cannot work - "Dependabot edits individual pinned lines; a fully-pinned
+    transitive lock has to be RE-RESOLVED as a graph" - and `.github/dependabot.yml` says
+    `/requirements` is deliberately unlisted. Neither stopped it: the PR was opened anyway, and
+    **nothing in this suite could see the damage**, because every existing assertion here is about
+    a pin being present and hashed rather than about it being CONDITIONAL.
+
+    So this is the guard for the defect rather than for the tool. A hand-edit does it too.
+    """
+
+    # Counted from the real files 2026-09-16, floored well below so ordinary resolution churn
+    # does not trip it. Zero is the failure that matters; the floor only makes it louder sooner.
+    MARKERED = {"dev.txt": 8, "build.txt": 8}
+
+    @pytest.mark.parametrize("name", sorted(MARKERED))
+    def test_the_lock_still_carries_conditional_pins(self, name):
+        text = (REQS / name).read_text(encoding="utf-8")
+        markered = [ln for ln in text.splitlines() if re.match(r"^[A-Za-z0-9._-]+==\S+ ; ", ln)]
+        assert len(markered) >= self.MARKERED[name], (
+            f"{name} carries {len(markered)} conditional pins, expected at least "
+            f"{self.MARKERED[name]}. A --universal lock that lost its environment markers has "
+            f"been re-resolved for ONE environment - it will install Linux-only packages "
+            f"everywhere and silently drop the ones that only apply elsewhere. Regenerate with "
+            f"./scripts/lock.sh rather than editing pins by hand.")
+
+    def test_the_windows_only_pin_is_still_conditional(self):
+        """`colorama ; os_name == 'nt'` is the single most legible instance: unconditional it is
+        installed on Linux where nothing wants it, and DELETED - which is what #456 did - it is
+        missing on the platform that needs it. Named explicitly because a count can be satisfied
+        while the one that matters is gone."""
+        text = (REQS / "build.txt").read_text(encoding="utf-8")
+        assert re.search(r"^colorama==\S+ ; os_name == 'nt'", text, re.M), (
+            "colorama lost its `os_name == 'nt'` marker, or was dropped from build.txt")
+
+    def test_the_counted_floors_name_files_that_exist(self):
+        """A floor for a file that has been renamed would pass vacuously forever."""
+        assert set(self.MARKERED) <= set(LOCKS), f"{set(self.MARKERED) - set(LOCKS)} not in LOCKS"
