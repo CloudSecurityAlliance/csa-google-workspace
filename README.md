@@ -76,7 +76,7 @@ project **you control**. About five minutes, once. Replace the placeholders with
 ### 1. Create a project
 
 [console.cloud.google.com/projectcreate](https://console.cloud.google.com/projectcreate) —
-name `<your-org> Drive/Docs MCP`, id `<your-org>-drive-docs-mcp` (globally unique, lowercase).
+name `<your-org> Drive-Docs MCP` (a `/` is rejected), id `<your-org>-drive-docs-mcp` — **click *Edit*** beside the auto-generated id, it is a link rather than a label. Ids are globally unique across all of Google Cloud, so a collision is rejected without explanation.
 
 ### 2. Enable **five** APIs
 
@@ -103,7 +103,7 @@ account under *Test users* (100 users max, re-consent every 7 days — fine for 
 way to deploy to a team).
 
 **The app name is what somebody reads while deciding whether to grant access to their Drive.** Use
-a name they can resolve — `<Your Org> Drive/Docs MCP`, not an internal codename.
+a name they can resolve — `<Your Org> Drive-Docs MCP`, not an internal codename.
 
 ### 4. Create the OAuth client
 
