@@ -68,6 +68,63 @@ tools**, so an AI client can read documents, triage and write comments, and edit
 the library. Content writes landed in 0.13.0 and Docs suggestions in 0.20.0, so the server now
 reaches everything the library does. Install with the `[mcp]` extra; see below.
 
+## Setting up the Google side
+
+No hosted component: this talks to Google as **you**, with an OAuth client from a Google Cloud
+project **you control**. About five minutes, once. Replace the placeholders with your own values.
+
+### 1. Create a project
+
+[console.cloud.google.com/projectcreate](https://console.cloud.google.com/projectcreate) —
+name `<your-org> Drive/Docs MCP`, id `<your-org>-drive-docs-mcp` (globally unique, lowercase).
+
+### 2. Enable **five** APIs
+
+| API | why |
+|---|---|
+| [Drive](https://console.cloud.google.com/apis/library/drive.googleapis.com) | files, search, permissions |
+| [Docs](https://console.cloud.google.com/apis/library/docs.googleapis.com) | document content |
+| [Sheets](https://console.cloud.google.com/apis/library/sheets.googleapis.com) | spreadsheet content |
+| [Slides](https://console.cloud.google.com/apis/library/slides.googleapis.com) | presentation content |
+| [Drive Labels](https://console.cloud.google.com/apis/library/drivelabels.googleapis.com) | label *names* — ids come from Drive, names do not |
+
+A granted scope is **not** an enabled API, and enablement is per-API: Docs can work while Sheets
+403s with `SERVICE_DISABLED`. Drive Labels is the one people skip — without it `list_labels`
+returns ids with `name: null`, which is the file still being labelled and only the names missing.
+
+### 3. Configure the consent screen
+
+[APIs & Services → OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)
+(Google now labels this "Google Auth Platform").
+
+**Internal** if you have a Google Workspace organization — only accounts in it can authorize, and
+Google waives app verification. **External** otherwise: leave it in *Testing* and add your own
+account under *Test users* (100 users max, re-consent every 7 days — fine for one person, not a
+way to deploy to a team).
+
+**The app name is what somebody reads while deciding whether to grant access to their Drive.** Use
+a name they can resolve — `<Your Org> Drive/Docs MCP`, not an internal codename.
+
+### 4. Create the OAuth client
+
+[Credentials](https://console.cloud.google.com/apis/credentials) → **Create credentials** →
+**OAuth client ID** → **Desktop app**. Download the JSON.
+
+### 5. Put it where the server looks
+
+```bash
+mkdir -p ~/.csa_google_workspace && chmod 700 ~/.csa_google_workspace
+mv ~/Downloads/client_secret_*.json ~/.csa_google_workspace/client_secret.json
+chmod 600 ~/.csa_google_workspace/client_secret.json
+```
+
+Or point `CSA_GW_CLIENT_SECRETS` elsewhere. Then `csa-google-workspace-mcp login`.
+
+**Read the consent screen rather than clicking through it** — it is the clearest view you will get
+of what this server can reach. `CSA_GW_READ_ONLY=1` requests a strictly read-only scope set, and
+gets its own token file so the guarantee is *which file exists* rather than a client-side flag over
+a write-capable credential.
+
 ## Install
 
 ```bash
