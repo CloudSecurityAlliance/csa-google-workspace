@@ -69,7 +69,12 @@ _CLAUDE = frozenset({
 _GOOGLE = _CLAUDE - {"update_file", "share_file", "trash_file"}
 
 # Present under every flavour — see the module docstring. These are not Drive operations.
-ALWAYS = frozenset({"authenticate", "describe_configuration", "read_server_resource"})
+# `auth_status` and `whoami` join them: no deployment should be able to narrow itself out of
+# being able to say whether it is logged in and as whom. Neither appears in Google's or Claude's
+# published surface, so a flavour would otherwise drop both - and an operator who has narrowed a
+# deployment still needs to answer "which account is this acting as" before trusting a write.
+ALWAYS = frozenset({"authenticate", "auth_status", "whoami",
+                    "describe_configuration", "read_server_resource"})
 
 # `None` means "no restriction", which is different from "an empty set".
 FLAVOURS: dict[str, frozenset[str] | None] = {

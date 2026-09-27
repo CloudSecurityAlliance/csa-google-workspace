@@ -1,7 +1,17 @@
-"""The `authenticate` tool: browser consent driven from inside the MCP client."""
+"""The identity tools: `authenticate`, `auth_status` and `whoami`.
+
+Together they answer the three questions a person actually asks of a server that holds a Google
+credential, and they are deliberately three tools rather than one: *can I get in* (`authenticate`),
+*am I in, and completely* (`auth_status`, no network call), and *as whom* (`whoami`, one narrow
+Drive read). Before #481 this server answered only the first, and identity had to be INFERRED by
+calling `list_recent_files` and looking for `"me": true` in `owners` - which costs a real Drive
+call, and still cannot tell "not logged in" apart from "logged in but revoked".
+"""
 from __future__ import annotations
 
+import os
 import uuid
+from typing import TYPE_CHECKING
 
 import anyio
 from mcp.server import MCPServer
@@ -9,15 +19,62 @@ from mcp.server.elicitation import AcceptedUrlElicitation
 from mcp.server.mcpserver import Context
 from mcp.server.mcpserver.exceptions import ToolError
 
+from ... import auth as _auth
 from ... import exceptions as exc
-from ...auth import load_cached_credentials, token_path_for
+from ...auth import ScopesMissingError, load_cached_credentials, token_path_for
 from .._auth_flow import build_flow, consent_url, finish, start_loopback
 from .._config import Settings
-from .._schemas import AuthOut
-from ._base import WRITE
+from .._schemas import AuthOut, AuthStatusOut, WhoamiOut
+from ._base import READ, WRITE
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from ..server import WorkspaceProviderT
 
 
-def register_auth_tools(app: MCPServer, settings: Settings) -> None:
+def _auth_status_payload(token_path: str, read_only: bool,
+                         client_secrets: str | None) -> AuthStatusOut:
+    """No network call, ever - that is the whole point of this existing separately from
+    `auth.load_cached_credentials`, which refreshes an expired access token over the wire as
+    part of returning usable credentials.
+
+    Takes its inputs as arguments rather than reading `Settings` in here, so it stays a pure
+    function of them and is testable without monkeypatching process state.
+
+    `token_path_for`, not the raw path: a read-only posture reads a SEPARATE cache (#185), and
+    reporting on the file the server would not actually read is the one wrong answer this
+    function could give while looking right.
+    """
+    path = token_path_for(token_path, read_only)
+    project = _auth.client_project_id(client_secrets)
+    if not os.path.exists(os.path.expanduser(path)):
+        return {"status": "no_credential", "token_path": path, "client_project": project,
+                "detail": f"No credential cached at {path}. Call `authenticate` to log in."}
+    try:
+        # `_read_cached`, not `load_cached_credentials`: the public function refreshes an
+        # expired access token over the network before returning, which is exactly the call
+        # this function exists to avoid making.
+        creds = _auth._read_cached(path, _auth.scopes_for(read_only), read_only=read_only,
+                                   explain_missing_scopes=True)
+    except ScopesMissingError as e:
+        return {"status": "scope_short", "token_path": path, "client_project": project,
+                "detail": str(e)}
+    except exc.AuthError as e:
+        return {"status": "no_credential", "token_path": path, "client_project": project,
+                "detail": f"The cached credential at {path} could not be read ({e}). "
+                          f"Call `authenticate` to log in again."}
+    # `_read_cached` RETURNS None as well as raising - a file that exists but holds nothing
+    # usable takes that path. Reporting `ready` for it would be the one answer this function
+    # must never give, since every caller reads `ready` as "go ahead and write".
+    if creds is None:
+        return {"status": "no_credential", "token_path": path, "client_project": project,
+                "detail": f"The credential cached at {path} is not usable. "
+                          f"Call `authenticate` to log in again."}
+    return {"status": "ready", "token_path": path, "client_project": project,
+            "detail": f"Credential cached at {path} with every required scope."}
+
+
+def register_auth_tools(app: MCPServer, settings: Settings,
+                        get_workspace: WorkspaceProviderT) -> None:
     """The `authenticate` tool: browser consent driven from inside the MCP client.
 
     MCP's own OAuth is for HTTP transports and authenticates the *client to the server*; we
@@ -105,3 +162,45 @@ def register_auth_tools(app: MCPServer, settings: Settings) -> None:
                               f"Claude Desktop use this file, so neither needs authorizing again."}
         finally:
             loopback.close()
+
+    @app.tool(annotations=READ)
+    def auth_status() -> AuthStatusOut:
+        """Whether a credential is cached, whether it covers every scope this deployment needs,
+        and - if so - whether it looks usable right now. Makes no network call and never returns
+        the credential itself.
+
+        Call this BEFORE `authenticate` rather than guessing from a failed tool call. Three
+        states, not two: `no_credential` (nothing usable cached - call `authenticate`),
+        `scope_short` (a credential IS cached and IS valid, it just predates a scope this
+        deployment has since started requiring - also `authenticate`, but the fix is a
+        re-consent, not a first login), and `ready`.
+
+        Every state also carries `client_project`: the Google Cloud project this deployment's
+        OAuth client belongs to, or `None` if none is configured or it could not be read. That
+        is the answer a consent flow never gave - which project a call is about to run against -
+        and it is how a person tells which side of the `cino-workspace-mcp` -> `csa-drive-docs-mcp`
+        migration a token is on."""
+        return _auth_status_payload(settings.token_path, settings.read_only,
+                                    settings.client_secrets)
+
+    @app.tool(annotations=READ)
+    def whoami() -> WhoamiOut:
+        """Which Google account this server is signed in as - the email address and display
+        name, and nothing else.
+
+        One narrow `about.get`; it reads no files. Before this existed the only way to establish
+        identity was to call `list_recent_files` and infer it from `"me": true` in `owners`,
+        which costs a real Drive call and cannot distinguish "not logged in" from "logged in but
+        revoked" - use `auth_status` for that question, which makes no call at all.
+
+        Worth checking before a write. This server can hold read AND modify scope over every
+        file the credential can reach, including sharing and trashing, so a token belonging to
+        the wrong account should be caught before it acts rather than after - that is the case
+        `authenticate(force=True)` exists for."""
+        # Built key by key rather than returned straight through: `Workspace.whoami` is a
+        # library method with a library return type, and the wire shape is a contract this
+        # module owns. Widening one to match the other would couple them in the wrong
+        # direction.
+        who = get_workspace().whoami()
+        return {"email_address": who["email_address"],
+                "display_name": who["display_name"]}

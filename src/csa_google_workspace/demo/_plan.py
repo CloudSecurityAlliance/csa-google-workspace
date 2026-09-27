@@ -68,6 +68,21 @@ def account_opening() -> list[Step]:
              "what the current policy will refuse, so a walkthrough can say up front what it "
              "will have to skip rather than hitting the refusal halfway through.",
              group="account"),
+        Step("auth_status", lambda s: {},
+             "Ask whether this server is logged in, without calling Google",
+             "No network call at all - it reads the local token file and reports one of three "
+             "states. `scope_short` is the one worth knowing: a credential that IS valid and "
+             "just predates a scope this deployment now needs, which is a re-consent rather "
+             "than a first login. It also names the Google Cloud project the OAuth client "
+             "belongs to, which is the only way to tell which side of a project migration a "
+             "token is on.",
+             group="account"),
+        Step("whoami", lambda s: {},
+             "Ask which Google account the server is acting as",
+             "One narrow `about.get`; it reads no files. Worth doing before any write, because "
+             "this server can hold sharing and trashing rights over every file the credential "
+             "reaches - a wrong-account token should be caught before it acts, not after.",
+             group="account"),
         Step("describe_configuration", lambda s: {},
              "Ask the server what it is allowed to do",
              "Every refusal later is explained by this. It reports the version, the OS, which "

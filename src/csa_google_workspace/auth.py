@@ -412,6 +412,67 @@ def read_client_secrets(path: str) -> dict:
     return config
 
 
+def _public_identity_fields(path: str) -> dict[str, str]:
+    """Only the NON-SECRET identity fields of a client-secrets file: `client_id`, `project_id`.
+
+    A separate read from `read_client_secrets`, deliberately, and the separation is the point.
+    That function returns the whole client config because `from_client_config` needs it - and
+    that config contains `client_secret`. Anything pulled out of it therefore flows, to a taint
+    analyser, from an object holding a secret; in the sibling `csa-google-gmail-calendar` CodeQL
+    flagged printing a `client_id` as "logs sensitive data (secret) as clear text" four times
+    over, from exactly this shape.
+
+    The analyser was not wrong about the structure, only about the field. The answer is to stop
+    routing a label through the credential: this reads the file again and returns only the two
+    values that are public by construction - a `client_id` appears in every consent URL, a
+    `project_id` in every 403 Google returns - so the value that reaches a `print` never passed
+    through the same object as the secret. Suppressing the alert would have left that true of
+    the code and false of the record.
+
+    Returns `{}` rather than raising on an absent, unreadable or malformed file: every caller
+    uses this to LABEL a flow, never to gate one.
+    """
+    try:
+        with open(os.path.expanduser(path), encoding="utf-8-sig") as handle:
+            body = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    node = body.get("installed") or body.get("web") or {}
+    return {key: str(node[key]) for key in ("client_id", "project_id") if node.get(key)}
+
+
+def client_project_id(path: str | None) -> str | None:
+    """The Google Cloud `project_id` a client-secrets file belongs to, or `None`.
+
+    Returns `None` - never raises - when `path` is falsy, the file is absent, unreadable, or not
+    a valid OAuth client-secrets document. Diagnostic information only, so a failure to read it
+    must never break a call that would otherwise work.
+
+    It is not a secret. The same `project_id` is disclosed on every OAuth consent screen (as part
+    of the app identity Google shows the user) and in the body of every 403 Google returns when
+    that project lacks an API a call needs. Do not "harden" this into raising or redacting later
+    on the theory that a project id looks sensitive - it is exactly as public as the consent
+    screen and the error message that already carry it, and hiding it here only removes the one
+    place this project shows which project a credential or a consent flow belongs to.
+
+    That silence is what let a real incident go unnoticed (#480): a live probe defaulted to THIS
+    server's OAuth client instead of its own. Consent SUCCEEDED - valid client, real account, six
+    scopes granted - and failed only on the first API call, 403, because this project has no
+    Gmail API enabled. It also left a Gmail grant attached to this app in the user's Google
+    account, which had to be revoked by hand. At no point did anything say which project was in
+    use: the `client_id` presented right there was opaque, and the `project_id` sitting beside it
+    in the same file was not.
+
+    Also the answer to "which side of a project migration am I on". This repo's client moved from
+    `cino-workspace-mcp` to `csa-drive-docs-mcp`; a token issued by the old project keeps
+    refreshing against it until that project is deleted, and nothing else here distinguishes the
+    two.
+    """
+    if not path:
+        return None
+    return _public_identity_fields(path).get("project_id")
+
+
 def load_credentials(client_secrets: str, token_path: str, read_only: bool,
                      *, force: bool = False) -> Credentials:
     """Interactive: reuse the cache, else open a browser for consent. Terminal use only.

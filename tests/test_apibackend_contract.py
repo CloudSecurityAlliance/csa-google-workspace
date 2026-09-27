@@ -733,3 +733,61 @@ def _top_level_fields(mask: str) -> set[str]:
             field.append(ch)
     out.append("".join(field))
     return {f.split("(")[0] for f in out}
+
+
+# --- get_about_user: the `.execute` wiring, and the required field mask --------
+#
+# `FakeBackend` cannot see either of these. It has no request objects, so it cannot notice that
+# `_errors.call` is handed a request instead of the unbound `.execute` it is meant to invoke -
+# which raises `TypeError: 'HttpRequest' object is not callable` against the real API while
+# every fake-backed test stays green. That is how it shipped in the first draft here, and a live
+# probe rather than the suite is what caught it.
+#
+# `_Request` below is deliberately NOT callable, so the wrong wiring fails the same way in a
+# test that it does against Google.
+
+class _About:
+    def __init__(self, result):
+        self._result = result
+        self.calls = []
+
+    def get(self, **kwargs):
+        self.calls.append(kwargs)
+        return _Request(self._result)
+
+
+class _DriveWithAbout:
+    def __init__(self, about):
+        self._about = about
+
+    def about(self):
+        return self._about
+
+
+class _ServicesWithAbout:
+    def __init__(self, about):
+        self.drive = _DriveWithAbout(about)
+
+
+def test_get_about_user_executes_the_request_rather_than_passing_it():
+    about = _About({"user": {"emailAddress": "a@b.c", "displayName": "A B"}})
+    backend = ApiBackend(_ServicesWithAbout(about))
+
+    assert backend.get_about_user() == {"emailAddress": "a@b.c", "displayName": "A B"}
+
+
+def test_get_about_user_asks_for_the_field_mask_about_get_requires():
+    """`about.get` returns 400 without `fields`, so the mask is load-bearing, not an
+    optimisation. It is also narrow on purpose: the resource carries storage quota and a long
+    tail of account settings that answering "who am I" has no business reading."""
+    about = _About({"user": {}})
+    ApiBackend(_ServicesWithAbout(about)).get_about_user()
+
+    assert about.calls == [{"fields": "user(emailAddress,displayName)"}]
+
+
+def test_a_response_without_a_user_node_is_an_empty_dict_not_none():
+    """Unknown must arrive as something a caller can `.get` on. `None` here would turn an odd
+    account into an AttributeError two layers up."""
+    backend = ApiBackend(_ServicesWithAbout(_About({})))
+    assert backend.get_about_user() == {}

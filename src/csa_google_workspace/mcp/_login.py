@@ -14,7 +14,12 @@ import os
 import sys
 from collections.abc import Mapping
 
-from ..auth import load_cached_credentials, read_client_secrets, token_path_for
+from ..auth import (
+    _public_identity_fields,
+    client_project_id,
+    load_cached_credentials,
+    token_path_for,
+)
 from ..exceptions import AuthError
 from ..workspace import Workspace
 from ._config import Settings
@@ -79,12 +84,15 @@ def _client_id_of(path: str) -> str | None:
     this caught `ValueError`, `JSONDecodeError` subclasses it, and a UTF-8 BOM therefore
     disabled the different-OAuth-client warning silently rather than failing anything (#449).
     Reading through `read_client_secrets` narrows it to files that really are unusable.
+
+    Reads through `auth._public_identity_fields` rather than `read_client_secrets`: this value
+    gets PRINTED, and `read_client_secrets` returns the whole config including `client_secret`,
+    so pulling a field out of it routes a printed label through a secret-bearing object. The
+    sibling `csa-google-gmail-calendar` collected four CodeQL "logs sensitive data as clear
+    text" alerts from exactly this shape. The narrow read returns only public fields, so the
+    printed value never passed through the same object as the secret.
     """
-    try:
-        d = read_client_secrets(path)
-    except AuthError:
-        return None
-    return (d.get("installed") or d.get("web") or {}).get("client_id") or None
+    return _public_identity_fields(path).get("client_id") or None
 
 
 def _token_client_id(token_path: str) -> str | None:
@@ -131,16 +139,27 @@ def login(settings: Settings, env: Mapping[str, str], *, force: bool = False, ou
                       f"  cached: {have}\n  wanted: {want}\n"
                       f"Re-authorize with `csa-google-workspace-mcp login --force` to use the "
                       f"intended client.", file=sys.stderr)
-            print(f"Already authorized (token cache: {cache}).\n"
+            print(f"Already authorized (token cache: {cache}, "
+                  f"project: {client_project_id(client_secrets) or 'unknown'}).\n"
                   f"Use `login --force` to authorize again.", file=out)
             return 0
 
+    # The project is named BEFORE the browser opens, so it can be checked against the app name
+    # on the consent screen that is about to appear. A `client_id` is opaque; a project id is
+    # not, and it was in the file the whole time. #480: a sibling repo's probe defaulted to the
+    # wrong client, consent SUCCEEDED against a real account, and the mistake only surfaced as a
+    # 403 on the first API call - having left a live grant on the wrong app.
+    project = client_project_id(client_secrets)
     print(f"Opening a browser to authorize access to your Google Workspace files.\n"
+          f"  Google project: {project or 'unknown (not stated in the client file)'}\n"
           f"  token cache: {token_path_for(settings.token_path, settings.read_only)}", file=out)
     # force=True bypasses the cache but deletes nothing: the old token is replaced only
     # once a new one exists, so a cancelled consent leaves the previous one working.
     with _branded_success_page():
         Workspace.from_oauth(client_secrets, settings.token_path,
                              read_only=settings.read_only, force=force)
-    print("Authorized. The MCP server can now start without prompting.", file=out)
+    # Named again on success: the consent screen is gone by now, and this is the record of
+    # which app the grant was actually made to.
+    print(f"Authorized against project {project or 'unknown'}. "
+          f"The MCP server can now start without prompting.", file=out)
     return 0

@@ -41,6 +41,10 @@ _REGISTER = pathlib.Path(tempfile.mkdtemp()) / "register.csv"
 _REGISTER.write_text(",".join(_export.COLUMNS) + "\n", encoding="utf-8")
 
 ARGS: dict[str, dict] = {
+    # Both take no arguments and neither is interactive: `auth_status` makes no call at all,
+    # and `whoami` is one `about.get` that `FakeBackend` answers.
+    "auth_status":           {},
+    "whoami":                {},
     "search_files":          {"query": "Doc"},
     "list_recent_files":     {},
     "get_file_metadata":     {"fileId": DOC},

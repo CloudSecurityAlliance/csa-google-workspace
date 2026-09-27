@@ -16,6 +16,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from ... import __version__
 from ..._environment import describe_environment
 from ...allowlist import Listing, preview
+from ...auth import client_project_id
 from ...policy import ALL_CAPABILITIES, Policy
 from .. import _flavours
 from .._capabilities import reachable_capabilities
@@ -102,6 +103,7 @@ def register_config_tools(app: MCPServer, settings: Settings,
             "capabilities_unreachable": sorted(policy.enabled - reachable),
             "capabilities_disabled": sorted(set(ALL_CAPABILITIES) - policy.enabled),
             "read_only": settings.read_only,
+            "client_project": client_project_id(settings.client_secrets),
             "flavour": settings.flavour,
             # Counted live rather than assumed: `published` is what the server actually
             # registered, and `hidden` is what the flavour filter removed at startup. A

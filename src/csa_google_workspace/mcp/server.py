@@ -41,6 +41,14 @@ IF A TOOL REPORTS THAT THE SERVER IS NOT AUTHORIZED: call the `authenticate` too
 sends the user a Google sign-in link in this conversation. If that is unavailable, relay the
 `... login` command from the error verbatim and wait for the user. Do not search the
 filesystem for credential files and do not retry other tools until authorization completes.
+Call `auth_status` first when you want to know WHY: it makes no network call and separates
+"never logged in" from "logged in, but a scope is missing" - the second needs a re-consent,
+not a first login, and telling a user they are logged out when they are not wastes their time.
+
+WHICH ACCOUNT AM I: call `whoami`. Do not infer identity from file ownership - it costs a
+Drive call and cannot tell a revoked credential from a working one. Worth checking before any
+share, trash or overwrite, because a token belonging to the wrong account should be caught
+before it acts rather than after.
 
 FILE IDS: never guess or invent one. Use a Drive file id or a share URL the user gave you,
 or find one with `search_files` / `list_recent_files` and confirm the match with the user
@@ -114,7 +122,7 @@ def create_server(get_workspace: WorkspaceProviderT, *, name: str = "csa-google-
                            local_write=settings.local_write if settings else True)
     register_suggestion_tools(app, get_workspace)
     if settings is not None:
-        register_auth_tools(app, settings)
+        register_auth_tools(app, settings, get_workspace)
         # Both need Settings, and both are about the server rather than about Google — so a
         # server constructed without Settings (a library embedder wiring its own Workspace)
         # gets the document tools and none of this.

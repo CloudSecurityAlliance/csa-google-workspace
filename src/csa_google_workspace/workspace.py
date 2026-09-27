@@ -28,6 +28,20 @@ class Workspace:
         self._backend = backend
         self.read_only = read_only
 
+    def whoami(self) -> dict[str, str | None]:
+        """The account this workspace is acting as: `email_address` and `display_name`.
+
+        A library method rather than something the MCP tool assembles, so the answer to "who am
+        I signed in as" is available to anyone using this package directly - the same seam rule
+        every control here follows. The server's `whoami` tool is a one-line wrapper.
+
+        Both values are `None` when Drive returns no `user` node. Unknown is not absent, and a
+        caller must be able to tell "Drive did not say" from "the address is empty".
+        """
+        user = self._backend.get_about_user()
+        return {"email_address": user.get("emailAddress") or None,
+                "display_name": user.get("displayName") or None}
+
     @property
     def files(self) -> FileCollection:
         """The account axis: find files, rather than operate on one you already named.
