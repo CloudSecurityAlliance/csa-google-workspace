@@ -201,3 +201,9 @@ experiments/**/*_transcript.json
 .claude/*
 !.claude/settings.json
 !.claude/README.md
+
+# uv regenerates this on any `uv run`, and `git add -A` then sweeps it in. A lock pins ONE
+# resolution, which is the wrong artifact for a library published to PyPI and tested across a
+# Python matrix - consumers resolve against their own constraints. Same call as the sibling
+# csa-google-gmail-calendar.
+uv.lock

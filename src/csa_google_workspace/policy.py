@@ -381,6 +381,16 @@ def _reply_gate(file_id: str, comment_id: str, content: Any = None,
 _GATES: dict[str, Gate] = {
     # reads — never gated: #82 is damage containment, not confidentiality. The agent already
     # sees whatever the user's credentials see.
+    # Who the credential belongs to. The ACCOUNT axis, not a file one - there is no file id to
+    # check, which is what `READS_LISTING` means here; the name is about the axis, not about
+    # returning a list. `_filter_listing` passes a result with no "files" key through untouched,
+    # so nothing is filtered and nothing needs a special case.
+    #
+    # Ungated like every other read: #82 is damage containment, not confidentiality. Withholding
+    # the caller's own address from the caller would contain nothing - they consented in a
+    # browser that showed it to them - while removing the cheapest check against acting as the
+    # wrong account.
+    "get_about_user": READS_LISTING,
     "get_file_metadata": READS_FILE,
     "list_permissions": READS_FILE,
     # "Who is waiting for access?" has no write in it. Ungated like every other read, and

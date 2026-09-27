@@ -432,6 +432,11 @@ class ConfigOut(TypedDict):
     capabilities_unreachable: list[str]  # enabled but no tool here uses them
     capabilities_disabled: list[str]
     read_only: bool
+    # Which Google Cloud project this deployment's OAuth client belongs to, or None when no
+    # client is configured or it could not be read. Not a secret - every consent screen and
+    # every 403 already carries it - and the one fact that distinguishes two deployments that
+    # are otherwise configured identically. See `auth.client_project_id` (#480).
+    client_project: str | None
     flavour: str                       # "full" | "google" | "claude"
     flavour_note: str                  # "" when full; otherwise what is hidden and why
     blocked_reason: str | None         # why something permits nothing, when it does
@@ -579,6 +584,50 @@ class SuggestionsOut(TypedDict):
 
 class AuthOut(TypedDict):
     status: str          # authorized | already_authorized | declined | timed_out
+    detail: str
+
+
+class WhoamiOut(TypedDict):
+    """The signed-in account's own identity.
+
+    **This module's header says an email address is not surfaced. That rule is about OTHER
+    PEOPLE** - a comment author is a third party whose address this server has no business
+    disclosing to a model (SECURITY.md, and #476 is the open question about authorship
+    resolution). The address here is the CALLER'S OWN, read from `about.get` against their own
+    credential; withholding it would tell a person nothing they could not learn by looking at
+    the browser they just consented in, while removing the only cheap answer to "which account
+    is this server acting as".
+
+    That question is a safety question on this server, not a convenience one: with read and
+    modify scope over every file the credentials can reach, including `file.share` and
+    `file.trash`, a wrong-account token should be detectable BEFORE a write, not after. It is
+    the case `authenticate(force=True)` exists for.
+
+    `email_address` is `None` when Drive returned no `user` node - unknown, which is not the
+    same as absent, and must not render as an empty address.
+    """
+    email_address: str | None
+    display_name: str | None
+
+
+class AuthStatusOut(TypedDict):
+    """Three states, not two, and the middle one is the reason this is not a boolean.
+
+    `no_credential` - nothing usable is cached; this is a first login.
+    `scope_short`   - a credential IS cached and IS valid, it just predates a scope this
+                      deployment has since started requiring. The fix is a re-consent, not a
+                      first login, and collapsing this into `no_credential` would say "you are
+                      not logged in" about a credential sitting right there and working fine
+                      for everything it was issued for.
+    `ready`         - cached, complete, and usable as far as can be told without a network call.
+
+    `client_project` rides on every state: which Google Cloud project the configured OAuth
+    client belongs to, or `None` if none is configured or it could not be read. See
+    `auth.client_project_id` for the incident that made its absence worth fixing.
+    """
+    status: str                      # no_credential | scope_short | ready
+    token_path: str
+    client_project: str | None
     detail: str
 
 

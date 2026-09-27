@@ -21,7 +21,7 @@ each project's own tool reference.
 **piotr-agier is the significant change: v2.6.0 now ships 115 tools** (its README says 116; its
 own `docs/tools.md` lists 115) — Shared Drives, permissions, revisions, surgical Docs editing,
 Sheets formatting, Slides authoring, PDF ingestion, Calendar. It is now **larger than this
-project's 56**, and the July entry calling it a Docs-anchoring specialist understates it.
+project's 58**, and the July entry calling it a Docs-anchoring specialist understates it.
 
 **But its comment surface is unchanged and still Docs-only:** `listComments`, `getComment`,
 `addComment`, `replyToComment`, `deleteComment`. Read from `docs/tools.md` — **no resolve, no

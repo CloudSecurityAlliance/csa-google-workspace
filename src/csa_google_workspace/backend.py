@@ -13,6 +13,7 @@ JsonDict = dict[str, Any]
 
 
 class Backend(Protocol):
+    def get_about_user(self) -> JsonDict: ...
     def get_file_metadata(self, file_id: str) -> JsonDict: ...
     def list_permissions(self, file_id: str) -> list[JsonDict]: ...
     def accept_suggestion(self, file_id: str, suggestion_id: str) -> None: ...
@@ -86,7 +87,13 @@ class FakeBackend:
     def __init__(self, files, *, documents=None, spreadsheets=None,
                  values=None, presentations=None, exports=None, media=None, comments=None,
                  permissions=None, access_proposals=None, file_labels=None,
-                 label_definitions=None, drives=None):
+                 label_definitions=None, drives=None, about_user=None):
+        # `None` is distinct from `{}`: a fixture that never sets this gets a usable default
+        # identity, while `about_user={}` models the real and separately-interesting case of
+        # Drive answering `about.get` with no `user` node at all - which `whoami` must report as
+        # "unknown" rather than rendering as an empty address.
+        self._about_user = {"emailAddress": "fake@example.com",
+                            "displayName": "Fake User"} if about_user is None else about_user
         self._files = files
         self._drives = drives or {}
         # Keyed (file_id, comment_id) -> raw Drive comment dict, matching what
@@ -115,6 +122,9 @@ class FakeBackend:
         self._file_labels = {fid: list(ls) for fid, ls in (file_labels or {}).items()}
         self._label_definitions = dict(label_definitions or {})
         self._writes = []
+
+    def get_about_user(self) -> dict:
+        return dict(self._about_user)
 
     def get_file_metadata(self, file_id: str) -> dict:
         try:
@@ -563,6 +573,27 @@ class ApiBackend:
 
     def __init__(self, services):
         self._services = services
+
+    def get_about_user(self) -> dict:
+        """The signed-in account's own identity, and nothing else.
+
+        `fields` is REQUIRED by `about.get` - Drive returns 400 without it - so the narrow mask
+        here is not an optimisation that could be dropped. Narrow on purpose regardless: the
+        resource also carries storage quota, import formats and a long tail of account settings
+        that `whoami` has no business reading, and a mask is the only thing standing between
+        "who am I" and all of it.
+        """
+        # The `user` NODE, not the whole about resource, so this method's contract is the same
+        # shape `FakeBackend` returns. `or {}` because a response without `user` is a real state
+        # (an odd account, a future field-mask change) and it must arrive as "no identity",
+        # never as `None` for a caller to `.get` on.
+        # `.execute` UNBOUND, handed to `_errors.call` to invoke - that is what gives this the
+        # 429/5xx retry handling every other call here gets. Passing the request object instead
+        # raises `TypeError: 'HttpRequest' object is not callable`, and no `FakeBackend` test
+        # can see it: the fake has no request objects at all. Caught by a live probe.
+        about = _errors.call(
+            self._services.drive.about().get(fields="user(emailAddress,displayName)").execute)
+        return about.get("user") or {}
 
     def get_file_metadata(self, file_id: str) -> dict:
         # `trashed` is requested for the allowlist preview: a trashed file still RESOLVES by id,

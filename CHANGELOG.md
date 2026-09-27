@@ -10,6 +10,70 @@
 > keeps this file honest; `scripts/check_release_history.py` reconciles it against git tags and
 > PyPI itself.
 
+## 2026-09-26 — v0.54.0 (who am I, and which project is this) — not released
+
+Two tools and one fact. Until now this was the only CSA MCP server in daily use that could not
+say **whether it was logged in** or **as whom** — Zendesk, Customer 360 and Gmail/Calendar all
+answer directly. Here it took inference: call `list_recent_files`, look for `"me": true` in
+`owners`, and hope. That costs a real Drive call, and it still cannot tell *not logged in* from
+*logged in but revoked*.
+
+### Added
+
+- **`auth_status`** — three states, no network call. `no_credential`, `scope_short`, `ready`.
+  The middle one is why this is not a boolean: a credential that IS cached and IS valid, and
+  merely predates a scope this deployment has since started requiring, needs a **re-consent**,
+  not a first login. Collapsing it into "not logged in" would be a false statement about a
+  token that is sitting right there working fine for everything it was issued for.
+
+  It reports the file the **active posture** actually reads (`token_path_for`) — read-only uses
+  a separate cache (#185), and naming the other file would be the one wrong answer this tool
+  could give while looking entirely right. (#481)
+
+- **`whoami`** — the signed-in address and display name, from one narrow `about.get`. It reads
+  no files. Worth calling before a write: this server can hold sharing and trashing rights over
+  every file the credential reaches, so a wrong-account token should be caught **before** it
+  acts, not after — the case `force=True` exists for.
+
+  The module-level rule that an email address is not surfaced is about **other people**; a
+  comment author is a third party. This address is the caller's own, read against their own
+  credential, and withholding it would tell them nothing they did not see in the browser they
+  just consented in. (#481)
+
+- **`client_project`** on `auth_status` and `describe_configuration`, and named by `login`
+  **before** the browser opens — so it can be checked against the app name on the consent
+  screen about to appear — and again on success, once that screen is gone.
+
+  A `client_secret.json` has carried `project_id` all along and nothing here ever read it. The
+  cost showed up in a sibling repo: a probe defaulted to **this** server's OAuth client,
+  consent **succeeded** against a real account with six scopes granted, and it failed only on
+  the first API call, 403, because that project has no Gmail API enabled — leaving a live grant
+  on the wrong app that had to be revoked by hand. Nothing in the flow ever said which project
+  was in use. A `client_id` is opaque; `csa-drive-docs-mcp` is not.
+
+  It is also how a person tells which side of the `cino-workspace-mcp` → `csa-drive-docs-mcp`
+  migration a token is on, which until now nothing here could answer. (#480)
+
+### Changed
+
+- `_login._client_id_of` reads through `auth._public_identity_fields` instead of
+  `read_client_secrets`. The value gets **printed**, and `read_client_secrets` returns the whole
+  config including `client_secret`, so pulling a field out of it routes a printed label through
+  a secret-bearing object. The sibling repo collected four CodeQL "logs sensitive data as clear
+  text" alerts from precisely that shape. The narrow read returns only public fields.
+
+### Notes
+
+`ApiBackend.get_about_user` shipped in its first draft passing the request object to
+`_errors.call` rather than the unbound `.execute` that call is meant to invoke — a `TypeError`
+against the real API, invisible to every `FakeBackend` test, because the fake has no request
+objects to get wrong. **A live probe caught it, not the suite.** The guard now lives in
+`tests/test_apibackend_contract.py`, whose whole purpose is behaviours `FakeBackend` cannot
+exercise, using a deliberately non-callable request double so the wrong wiring fails in a test
+the same way it fails against Google.
+
+Tools: 56 → 58.
+
 ## 2026-09-15 — v0.53.0 (a first Windows run, and what it found)
 
 **Nothing changes for a caller on macOS or Linux.** Every behavioural fix here is Windows-only,

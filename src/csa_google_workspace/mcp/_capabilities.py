@@ -139,6 +139,11 @@ TOOL_CAPABILITIES: dict[str, str | None] = {
     "demonstration_plan": None,
     "read_server_resource": None,
     "authenticate": None,
+    # No Google call at all - only this process's own view of a local token file.
+    "auth_status": None,
+    # One `about.get` against the caller's OWN account. `None` like every other read here:
+    # capabilities in this server gate WRITES, and reads are bounded by the granted scope.
+    "whoami": None,
 }
 
 
