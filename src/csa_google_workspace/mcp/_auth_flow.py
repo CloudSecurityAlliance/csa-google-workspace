@@ -92,8 +92,8 @@ class Loopback:
     def close(self) -> None:
         try:
             self._server.server_close()
-        except OSError:
-            pass
+        except OSError:      # pragma: no cover - close is idempotent on CPython's socket,
+            pass             # so this guards a platform that does not behave that way
 
 
 def start_loopback() -> Loopback:

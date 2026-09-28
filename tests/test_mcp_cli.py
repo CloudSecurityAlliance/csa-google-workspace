@@ -11,6 +11,7 @@ is what is asserted.
 """
 import contextlib
 import io
+import pathlib
 
 import pytest
 
@@ -335,3 +336,167 @@ def test_missing_everywhere_says_where_it_looked(tmp_path, monkeypatch, capsys):
     assert cli.main(["login"], {}) == 2
     err = capsys.readouterr().err
     assert "CSA_GW_CLIENT_SECRETS" in err and "absent.json" in err
+
+
+# --- the verbs that answer questions without starting a session ---------------
+#
+# `describe` and `configure` exist for the same reason `--version` does: an installer could
+# not otherwise check what it had just installed, configured, or granted. All three were
+# added after a real bug in which the CSA installer printed a notice about the DEFAULT
+# posture while the user's actual environment said something else.
+
+def test_describe_prints_the_effective_policy_not_the_default_one(capsys):
+    """The RR-003 shape: a notice about permissions has to be GENERATED from the permissions.
+
+    So the env is set to something that is not the default, and the output has to reflect
+    it. Asserting only that `describe` prints *something* would pass against a hardcoded
+    string, which is the exact defect this verb exists to prevent.
+    """
+    assert cli.main(["describe"], {"CSA_GW_READ_ONLY": "1"}) == 0
+    out, err = capsys.readouterr()
+    assert out == ""                                   # stdout is the JSON-RPC channel
+    assert "Read-only mode: **on**" in err
+
+    # The same line, from the same renderer, with the environment removed. Both renderings
+    # mention read-only mode - only the VALUE differs - so matching on the word alone would
+    # pass against either, which is the mistake this pair exists to rule out.
+    assert cli.main(["describe"], {}) == 0
+    assert "Read-only mode: **off**" in capsys.readouterr().err
+
+
+def test_describe_accepts_its_aliases(capsys):
+    for verb in ("describe", "describe-configuration", "config"):
+        assert cli.main([verb], {}) == 0
+        assert capsys.readouterr().err != ""
+
+
+class TestConfigure:
+    """`configure` merges this server into Claude Desktop's config file.
+
+    Every test here pins `config_path` at a tmp file. The suite-wide HOME redirect already
+    keeps the real one out of reach, but these need to READ BACK what was written, and a
+    test that asserts on a path it did not choose is one that stops meaning anything the day
+    the default moves.
+    """
+
+    @pytest.fixture
+    def desktop(self, tmp_path, monkeypatch):
+        path = tmp_path / "claude_desktop_config.json"
+        monkeypatch.setattr("csa_google_workspace.mcp._desktop.config_path", lambda env=None: path)
+        return path
+
+    def test_it_writes_the_config_and_says_where(self, desktop, capsys):
+        import json
+
+        assert cli.main(["configure"], {}) == 0
+        out, err = capsys.readouterr()
+        assert out == ""
+        assert f"created {desktop}" in err
+        assert "restart Claude Desktop" in err
+        assert "csa-google-workspace" in json.loads(desktop.read_text())["mcpServers"]
+
+    def test_print_writes_nothing_at_all(self, desktop, capsys):
+        """`--print` is what somebody runs before trusting this with a file that already has
+        their other servers in it. It has to be inert, not merely quiet."""
+        assert cli.main(["configure", "--print"], {}) == 0
+        assert not desktop.exists()
+        assert f"would write to {desktop}" in capsys.readouterr().err
+
+    def test_a_second_run_reports_no_change_rather_than_claiming_an_update(self, desktop, capsys):
+        cli.main(["configure"], {}); capsys.readouterr()
+        assert cli.main(["configure"], {}) == 0
+        assert "already correct" in capsys.readouterr().err
+
+    def test_a_changed_entry_is_reported_as_an_update_and_keeps_a_backup(self, desktop, capsys):
+        """A backup that does not hold the PREVIOUS version is worse than no backup, because
+        somebody trusts it. So the path printed is opened and compared, rather than the line
+        merely being present - the failure mode here is a real file with the wrong contents."""
+        cli.main(["configure"], {}); capsys.readouterr()
+        before = desktop.read_text()
+
+        assert cli.main(["configure"], {"CSA_GW_READ_ONLY": "1"}) == 0
+        err = capsys.readouterr().err
+        assert f"updated {desktop}" in err
+
+        kept = err.split("previous version kept at ")[1].splitlines()[0]
+        assert pathlib.Path(kept).read_text() == before
+        assert desktop.read_text() != before
+
+    def test_it_names_the_variables_it_carried(self, desktop, capsys):
+        """Desktop has no shell, so the config's `env` block is the only place it reads
+        policy from. Naming them is how somebody checks that the posture they set in a
+        terminal is the posture Desktop will run under."""
+        cli.main(["configure"], {"CSA_GW_READ_ONLY": "1", "CSA_GW_PROFILE": "reader"})
+        err = capsys.readouterr().err
+        assert "carried 2 CSA_GW_* variable(s)" in err
+        assert "CSA_GW_READ_ONLY" in err and "CSA_GW_PROFILE" in err
+
+    def test_carrying_nothing_says_the_defaults_are_OPEN(self, desktop, capsys):
+        """RR-003, found 2026-09-01. This printed the OPPOSITE of runtime behaviour at the
+        moment somebody set the server up - "nothing is reachable until you set an
+        allowlist" when in fact everything is. A wrong sentence in a file nobody opens is a
+        defect; a wrong sentence printed during setup is somebody believing they are scoped
+        when they are not."""
+        cli.main(["configure"], {})
+        err = capsys.readouterr().err
+        assert "none were carried" in err
+        assert "THE DEFAULTS, WHICH ARE OPEN" in err
+        assert "CSA_GW_READ_ONLY=1" in err, "it must say how to narrow, not just that it is wide"
+
+    def test_an_unparseable_config_is_refused_rather_than_replaced(self, desktop, capsys):
+        """Somebody's other MCP servers live in that file. A file that does not parse is
+        most likely one they are part-way through editing, so the cost of guessing wrong is
+        their whole config - exit 1 and touch nothing."""
+        desktop.write_text('{"mcpServers": {', encoding="utf-8")
+        assert cli.main(["configure"], {}) == 1
+        assert desktop.read_text() == '{"mcpServers": {', "the file was modified"
+        assert "not valid JSON" in capsys.readouterr().err
+
+    def test_an_unknown_argument_is_rejected_with_usage(self, desktop, capsys):
+        assert cli.main(["configure", "--frobnicate"], {}) == 2
+        assert not desktop.exists()
+        err = capsys.readouterr().err
+        assert "unknown argument: --frobnicate" in err and "usage:" in err
+
+    def test_it_accepts_the_other_two_spellings_of_print(self, desktop, capsys):
+        for flag in ("--dry-run", "-n"):
+            assert cli.main(["configure", flag], {}) == 0
+            assert not desktop.exists()
+            assert "would write to" in capsys.readouterr().err
+
+
+def test_login_rejects_an_unknown_flag_instead_of_treating_it_as_force(capsys):
+    """`login --frce` must not silently become a plain login - and must certainly not become
+    `--force`, which throws away a working token and reopens a browser."""
+    assert cli.main(["login", "--frce"], {}) == 2
+    err = capsys.readouterr().err
+    assert "unknown argument: --frce" in err and "usage:" in err
+
+
+def test_demo_is_dispatched_with_the_remaining_arguments(monkeypatch):
+    """The demo is this project's end-to-end test, and it is imported inside the branch so
+    the server path never loads it. What is asserted is the hand-off: the verb is consumed
+    and everything after it reaches the demo untouched."""
+    seen = {}
+    monkeypatch.setattr("csa_google_workspace.demo._cli.main",
+                        lambda argv, env: seen.update(argv=argv, env=env) or 7)
+
+    assert cli.main(["demo", "--auto"], {"CSA_GW_TOKEN": "/t"}) == 7
+    assert seen["argv"] == ["--auto"]
+    assert seen["env"] == {"CSA_GW_TOKEN": "/t"}
+
+
+def test_a_clean_shutdown_exits_zero(tmp_path, no_interactive_flow, monkeypatch):
+    """`run()` returning is the normal end of a session: the client closed stdio. Exiting
+    non-zero there would report a crash on every ordinary disconnect, and the place that
+    reads the exit code is whatever supervises the server - a launcher, a wrapper script, a
+    log somebody scans for failures.
+
+    Every other test here makes `run` raise, so the line after it had never executed.
+    """
+    ran = {}
+    monkeypatch.setattr("mcp.server.MCPServer.run",
+                        lambda self, transport="stdio", **kw: ran.update(transport=transport))
+
+    assert cli.main([], {"CSA_GW_TOKEN": str(tmp_path / "absent.json")}) == 0
+    assert ran == {"transport": "stdio"}

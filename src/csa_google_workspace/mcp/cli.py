@@ -142,8 +142,11 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
             print(f"created {result.path}", file=out)
         elif result.changed:
             print(f"updated {result.path}", file=out)
-            if result.backup:
-                print(f"previous version kept at {result.backup}", file=out)
+            # Unconditional, because `configure` takes a backup on exactly this condition -
+            # the file existed and its contents are changing - so a guard on `result.backup`
+            # here is a branch that cannot be false. Coverage is what said so: it sat as a
+            # partial branch, which is the dead-code signal rather than a gap in testing.
+            print(f"previous version kept at {result.backup}", file=out)
         else:
             print(f"{result.path} was already correct", file=out)
         from ._desktop import carried_env

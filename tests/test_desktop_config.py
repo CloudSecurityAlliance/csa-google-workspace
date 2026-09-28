@@ -136,3 +136,125 @@ class TestTheDryRun:
         result = _desktop.configure(config, env={}, dry_run=True)
         assert "csa-google-workspace" in result.rendered
         assert result.path == config
+
+
+class TestWhereTheConfigLives:
+    """`config_path` per platform. Only one branch can run on any given machine, so the other
+    two had never executed - and the Windows one is the branch that matters most, because
+    Desktop on Windows is half the intended audience and `Path.home()/AppData` is not where it
+    looks if `APPDATA` has been redirected."""
+
+    def test_macos_uses_application_support(self, monkeypatch):
+        monkeypatch.setattr(_desktop.sys, "platform", "darwin")
+        assert _desktop.config_path({}) == (
+            _desktop.Path.home() / "Library/Application Support/Claude/claude_desktop_config.json")
+
+    def test_windows_prefers_the_appdata_variable_over_a_guess(self, monkeypatch):
+        """A roaming profile, a redirected AppData, or a machine where the user directory is
+        not under `C:\\Users` - all of them move this, and `APPDATA` is the value that is
+        actually right. Guessing from the home directory is the fallback, not the answer."""
+        monkeypatch.setattr(_desktop.sys, "platform", "win32")
+        got = _desktop.config_path({"APPDATA": "D:/Roaming"})
+        assert got == _desktop.Path("D:/Roaming") / "Claude/claude_desktop_config.json"
+
+    @pytest.mark.parametrize("env", [{}, {"APPDATA": ""}], ids=["unset", "empty"])
+    def test_windows_without_appdata_falls_back_under_the_home_directory(self, monkeypatch, env):
+        """An empty string counts as unset. `Path("") / "Claude/..."` is a RELATIVE path, so
+        taking it literally would write the config into the current working directory."""
+        monkeypatch.setattr(_desktop.sys, "platform", "win32")
+        expected = _desktop.Path.home() / "AppData/Roaming/Claude/claude_desktop_config.json"
+        assert _desktop.config_path(env) == expected
+
+    def test_linux_answers_rather_than_raising(self, monkeypatch):
+        """Linux Desktop is not a shipped target. Returning the XDG-ish location is more
+        useful than an exception, because `configure --print` still shows somebody the right
+        JSON to paste - which is the whole of what this can do for them there."""
+        monkeypatch.setattr(_desktop.sys, "platform", "linux")
+        assert _desktop.config_path({}) == (
+            _desktop.Path.home() / ".config/Claude/claude_desktop_config.json")
+
+    def test_it_reads_the_process_environment_when_given_none(self, monkeypatch):
+        monkeypatch.setattr(_desktop.sys, "platform", "win32")
+        monkeypatch.setenv("APPDATA", "E:/Elsewhere")
+        assert _desktop.config_path() == (
+            _desktop.Path("E:/Elsewhere") / "Claude/claude_desktop_config.json")
+
+
+class TestResolvingTheLaunchCommand:
+    """Three sources, in order of how self-contained the result is. Only the first runs in a
+    normal checkout, so the two fallbacks had never executed - and they are what a `pipx`
+    install that has been moved, or a `python -m` invocation, actually lands on."""
+
+    def test_the_script_beside_this_interpreter_wins(self, tmp_path, monkeypatch):
+        """A pipx or venv install. The script's shebang pins the correct Python, so the config
+        needs no interpreter and no PATH - which is the entire problem being solved."""
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        (fake_bin / _desktop.SCRIPT_NAME).write_text("#!/usr/bin/env python3\n")
+        monkeypatch.setattr(_desktop.sys, "executable", str(fake_bin / "python"))
+        monkeypatch.setattr(_desktop.shutil, "which",
+                            lambda n: pytest.fail("PATH was consulted before the local script"))
+
+        command, how = _desktop.launch_command()
+        assert command == [str(fake_bin / _desktop.SCRIPT_NAME)]
+        assert "beside this interpreter" in how
+
+    def test_a_script_on_path_is_resolved_to_an_absolute_path(self, tmp_path, monkeypatch):
+        """Correct, and one step less certain - it may not be the install this process came
+        from, which is why the reason is reported alongside. Resolved because a bare name is
+        exactly what fails under launchd's PATH."""
+        elsewhere = tmp_path / "usr" / "local" / "bin"
+        elsewhere.mkdir(parents=True)
+        script = elsewhere / _desktop.SCRIPT_NAME
+        script.write_text("#!/usr/bin/env python3\n")
+        monkeypatch.setattr(_desktop.sys, "executable", str(tmp_path / "nowhere" / "python"))
+        monkeypatch.setattr(_desktop.shutil, "which", lambda n: str(script))
+
+        command, how = _desktop.launch_command()
+        assert command == [str(script.resolve())]
+        assert _desktop.Path(command[0]).is_absolute()
+        assert _desktop.SCRIPT_NAME in how and "PATH" in how
+
+    def test_the_last_resort_is_this_interpreter_with_dash_m(self, tmp_path, monkeypatch):
+        """Always available and always right about the interpreter - `sys.executable` is
+        absolute by construction - which is what makes it a real fallback rather than a
+        guess."""
+        monkeypatch.setattr(_desktop.sys, "executable", str(tmp_path / "nowhere" / "python"))
+        monkeypatch.setattr(_desktop.shutil, "which", lambda n: None)
+
+        command, how = _desktop.launch_command()
+        assert command == [str(tmp_path / "nowhere" / "python"), "-m", "csa_google_workspace.mcp"]
+        assert "-m" in how
+
+    def test_a_multi_word_command_is_split_into_command_and_args(self, tmp_path, monkeypatch):
+        """Claude Desktop's config has separate `command` and `args` keys; putting
+        "python -m csa_google_workspace.mcp" in `command` makes it look for an executable with
+        spaces in its name."""
+        monkeypatch.setattr(_desktop.sys, "executable", str(tmp_path / "nowhere" / "python"))
+        monkeypatch.setattr(_desktop.shutil, "which", lambda n: None)
+
+        written = _desktop.entry({})
+        assert written["command"] == str(tmp_path / "nowhere" / "python")
+        assert written["args"] == ["-m", "csa_google_workspace.mcp"]
+
+    def test_a_single_word_command_carries_no_args_key_at_all(self, tmp_path, monkeypatch):
+        """Absent rather than empty. `"args": []` is a different document, and this file is
+        diffed against itself to decide whether anything changed."""
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        (fake_bin / _desktop.SCRIPT_NAME).write_text("")
+        monkeypatch.setattr(_desktop.sys, "executable", str(fake_bin / "python"))
+
+        assert "args" not in _desktop.entry({})
+
+
+def test_a_config_that_is_not_a_json_object_is_left_alone(tmp_path):
+    """Valid JSON, wrong shape - a list, a string, a number. It parses, so the JSONDecodeError
+    branch does not catch it, and `existing.get` would raise AttributeError deep inside the
+    merge. Somebody's other MCP servers are not in there, but whatever IS in there is theirs."""
+    path = tmp_path / "claude_desktop_config.json"
+    path.write_text('["not", "an", "object"]', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="could not be read as a JSON object"):
+        _desktop.configure(path, env={})
+    assert path.read_text() == '["not", "an", "object"]'

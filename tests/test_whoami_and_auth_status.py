@@ -10,6 +10,8 @@ transport precisely because its tests chose a calling convention the transport n
 """
 import asyncio
 import json
+import os
+import pathlib
 
 import pytest
 
@@ -149,6 +151,47 @@ class TestAuthStatus:
                      "auth_status")
         assert absent["client_project"] == "csa-drive-docs-mcp"
         assert ready["client_project"] == "csa-drive-docs-mcp"
+
+    def test_a_tilde_path_is_expanded_the_way_the_loader_expands_it(self, monkeypatch):
+        """#490, and it hit the DEFAULT configuration.
+
+        `CSA_GW_TOKEN` defaults to `~/.csa_google_workspace/token.json`. This function used to
+        expand the `~` for its existence check and then hand `_read_cached` the raw form -
+        which does not expand it, finds nothing, and returns None. Every default install with
+        a working credential was told "the credential cached there is not usable. Call
+        `authenticate` to log in again."
+
+        It is the exact failure this tool exists to avoid. `auth_status` predicts what
+        `load_cached_credentials` would say WITHOUT making its network call; the two
+        disagreeing about which file they read makes the prediction worthless while it still
+        reads as confident. So the assertion is not "it says ready" - it is that both
+        functions agree, against the same path, on the same machine.
+        """
+        home = pathlib.Path(os.environ["HOME"])
+        (home / ".csa_google_workspace").mkdir(parents=True, exist_ok=True)
+        write_token(home / ".csa_google_workspace" / "token.json")
+
+        tilde = "~/.csa_google_workspace/token.json"
+        out = call(build(token_path=tilde), "auth_status")
+
+        assert out["status"] == "ready"
+        assert out["token_path"] == str(home / ".csa_google_workspace" / "token.json"), \
+            "the path reported is the file actually read, not the form it was configured in"
+        assert auth.load_cached_credentials(tilde, read_only=False) is not None, \
+            "the loader disagrees, so `ready` above proves nothing"
+
+    def test_a_token_that_loads_as_nothing_is_never_reported_ready(self, tmp_path, monkeypatch):
+        """`_read_cached` is typed `Credentials | None` and returns None as well as raising -
+        today only when the file disappears between the existence check and the read, which is
+        a race rather than something a test can stage.
+
+        The branch is kept and pinned anyway, because the wrong answer here is the expensive
+        one: every caller reads `ready` as "go ahead and write"."""
+        monkeypatch.setattr(auth, "_read_cached", lambda *a, **kw: None)
+        out = call(build(token_path=write_token(tmp_path / "token.json")), "auth_status")
+
+        assert out["status"] == "no_credential"
+        assert "not usable" in out["detail"]
 
     def test_client_project_is_none_when_no_client_is_configured(self, tmp_path):
         out = call(build(token_path=str(tmp_path / "absent.json"), client_secrets=None),
