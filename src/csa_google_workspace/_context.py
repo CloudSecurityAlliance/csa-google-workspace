@@ -366,7 +366,15 @@ def build(document: dict, quote: str | None, *, paragraphs: int = 0) -> Context 
         text, kind = "".join(parts), KIND_HEADING
         note = ("The selection is a heading, so the context is the heading plus the first "
                 "following body paragraph - a heading's subject is what it heads.")
-    elif not block.has_text:
+    elif not block.has_text:                        # pragma: no cover - UNREACHABLE, see #492
+        # `quote` is non-blank (the first guard returns KIND_NO_QUOTE otherwise) and `at` is
+        # the first block CONTAINING it, so `block.text.strip()` cannot be empty and this is
+        # never true. Confirmed by exhaustive sweep, not only by reading.
+        #
+        # Kept rather than deleted because `nearest_text` is in the `context_kind` enum a
+        # consumer reads, and removing a documented value is a contract change with a
+        # CHANGELOG line, not a tidy-up. #492 carries the decision: delete it, or reorder the
+        # guards so a text-free anchor lands here instead of in `no_quote`.
         nearest = next((b.text for b in blocks[at + 1:] if b.has_text), "") or \
                   next((b.text for b in reversed(blocks[:at]) if b.has_text), "")
         text, kind = nearest, KIND_NEAREST
