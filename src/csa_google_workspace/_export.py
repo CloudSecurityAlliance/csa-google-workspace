@@ -485,7 +485,13 @@ _ILLEGAL = "".join(chr(c) for c in list(range(0, 9)) + [11, 12] + list(range(14,
 _STRIP = str.maketrans("", "", _ILLEGAL)
 
 
-def _sheet_safe(value: Any) -> Any:
+def _sheet_safe(value: Any) -> str:
+    """Always a `str`, for any input - `flatten` guarantees it.
+
+    Annotated rather than left as `Any` because the write-back pass below GUARDS on the cell
+    being a string, and that guard's false arm is unreachable precisely while this promise
+    holds. Loosening the return type here silently re-opens #182.
+    """
     text = flatten(value)
     return text.translate(_STRIP) if text else text
 
@@ -557,7 +563,11 @@ def _build_xlsx(columns: list[str], rows: list[dict], *, title: str):
         # record. `set_explicit_value` does not exist in openpyxl 3.1.5 - assignment followed
         # by `data_type` is the mechanism that works there. (#182)
         for cell in ws[ws.max_row]:
-            if isinstance(cell.value, str):
+            # `_sheet_safe` returns a `str` for every input, so the false arm of this guard is
+            # unreachable today - hence `no branch` rather than a test that cannot be written.
+            # The guard stays: what it prevents is a live formula in somebody's spreadsheet,
+            # and the day `_sheet_safe` widens is the day it starts mattering.
+            if isinstance(cell.value, str):     # pragma: no branch - see above
                 cell.data_type = "s"
 
     font = "Arial"
