@@ -57,7 +57,7 @@ looked for, which is the reason this table exists.
 | `mcp/` — server, auth flow, config, resources | **partial** — 15/16 at 2026-09-01 · 82% of lines |
 | `mcp/_tools/` — the tool registrations | 2026-08-27 · claude-code · 56% of lines |
 | `demo/` | 2026-08-27 · claude-code · 83% of lines |
-| `tests/` as code | **partial** — 13/159 at 2026-09-01 · 12% of lines |
+| `tests/` as code | **partial** — 13/160 at 2026-09-01 · 12% of lines |
 | `.github/workflows/` | 2026-09-01 · codex · 94% of lines |
 | packaging and secret-scanning config | 2026-08-27 · claude-code · 78% of lines |
 | `scripts/` | **partial** — 6/7 at 2026-09-01 · 76% of lines |
