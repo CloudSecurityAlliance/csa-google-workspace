@@ -303,3 +303,65 @@ class TestTheCeilingResource:
         assert ".docx" in body and "PDF" in body
         assert "download_file_content" in body, "the working alternative must be named"
         assert "provenance" in body, "the reason it is withheld, and what would lift it"
+
+
+class TestTheTwoHelpResourcesAreServedAndNotJustRegistered:
+    """A registered resource with a broken body is a link that fails when somebody follows it.
+
+    These two are the ones a model reaches for when it has just been refused - "how do I
+    configure this?" and "what can this server not do?" - so an exception here arrives at the
+    worst moment, on top of a refusal the reader is already trying to understand.
+    """
+
+    def test_the_configuration_reference_is_readable(self):
+        text = _flat(_read(_server(POSTURE), HELP_URI))
+
+        assert "CSA_GW_ALLOWLIST_READ" in text
+        assert "CSA_GW_CAPABILITIES" in text
+
+    def test_the_ceiling_is_readable_and_separates_the_two_kinds_of_limit(self):
+        """Google's limits and this project's. A refusal worth working around and one that is
+        not are different situations, and merging them is how somebody spends an afternoon on
+        the first kind."""
+        text = _flat(_read(_server(POSTURE), CEILING_URI))
+        assert "Google" in text
+
+    def test_both_are_listed_with_a_description_that_says_what_they_answer(self):
+        """A resource list is a menu. An entry whose description does not say what question it
+        answers is one nobody opens."""
+        resources = {str(r.uri): r for r in asyncio.run(_server(POSTURE).list_resources())}
+
+        assert HELP_URI in resources and CEILING_URI in resources
+        assert "configure" in resources[HELP_URI].description
+        assert "impossible" in resources[CEILING_URI].description
+
+
+class TestDescribingTheCapabilityDefault:
+    """The sentence `CSA_GW_CAPABILITIES` gets in the configuration reference, which has two
+    forms - and the difference between them is a security claim.
+
+    If the default set EXCLUDES anything, the sentence has to name what. A reader who is told
+    only "the default set" and not "which excludes comment.delete" has no way to know whether
+    the thing they are about to attempt is on, and the four irreversible capabilities are
+    exactly the ones that matter.
+    """
+
+    def test_it_names_the_exclusions_when_there_are_any(self, monkeypatch):
+        from csa_google_workspace.mcp import _resources
+
+        monkeypatch.setattr(_resources, "DEFAULT_DISABLED", frozenset({"comment.delete"}))
+        sentence = _resources._default_note()
+
+        assert "which excludes" in sentence and "`comment.delete`" in sentence
+
+    def test_it_says_so_plainly_when_the_default_excludes_nothing(self, monkeypatch):
+        """Today's state, and the one worth being explicit about: unset means EVERYTHING is
+        on, including the four Google gives no way to undo. A sentence that merely said "the
+        default set" would read as a narrowing."""
+        from csa_google_workspace.mcp import _resources
+
+        monkeypatch.setattr(_resources, "DEFAULT_DISABLED", frozenset())
+        sentence = _resources._default_note()
+
+        assert "which excludes" not in sentence
+        assert "CSA_GW_CAPABILITIES" in sentence

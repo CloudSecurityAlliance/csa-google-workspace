@@ -19,7 +19,7 @@ from . import _untrusted
 
 if sys.version_info >= (3, 12):
     from typing import TypedDict
-else:
+else:                                 # pragma: no cover - the other half of the version gate
     # Pydantic cannot introspect `typing.TypedDict` on Python < 3.12 (the runtime does not
     # expose __required_keys__ the way it needs), and fails *silently*: the tool still runs,
     # but structuredContent comes back null. Caught only by the CI matrix — a 3.12 dev box

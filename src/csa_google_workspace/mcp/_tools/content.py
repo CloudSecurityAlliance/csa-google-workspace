@@ -121,8 +121,13 @@ def register_content_tools(app: MCPServer, get_workspace: WorkspaceProviderT) ->
             # getattr, not _require: a type without text extraction should still return its
             # metadata rather than fail the whole call.
             as_text = getattr(doc, "as_text", None)
-            if as_text is not None:
+            if as_text is not None:            # pragma: no branch - see below
                 snippet = as_text()[:SNIPPET_CHARS] or None
+            # The false arm is unreachable TODAY, deliberately. `workspace.open` returns
+            # exactly Doc, Sheet or Slides, and all three define `as_text`; anything else has
+            # already returned above on `not ref.openable`. The guard is for the next type
+            # added, where the alternative is losing the name, the type and the link over a
+            # snippet - so it is kept and marked, rather than removed and rediscovered.
         return file_metadata_out(doc, snippet)
 
     @app.tool(annotations=READ)

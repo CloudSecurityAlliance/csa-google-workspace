@@ -56,8 +56,8 @@ Practical advice, none of it hypothetical:
   in it.
 
 None of which is to undersell what works: the library is **feature-complete for its scoped
-roadmap** and **live-verified end-to-end against real Google**, behind **over 1,600 offline
-tests**, with
+roadmap** and **live-verified end-to-end against real Google**, behind **over 2,300 offline
+tests at 100% coverage of most modules**, with
 `ruff` and `mypy` clean in CI across Python 3.10–3.14. Shipped across Docs/Sheets/Slides: comment
 management, content read/write, Sheets comment→cell mapping, and Docs suggestions read. See
 [`CHANGELOG.md`](./CHANGELOG.md); design and phased plans under

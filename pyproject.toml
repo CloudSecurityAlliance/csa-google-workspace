@@ -142,18 +142,34 @@ source = ["csa_google_workspace"]
 branch = true
 
 [tool.coverage.report]
-# Unit suite runs offline against FakeBackend; ApiBackend's real-Google calls and the
-# interactive OAuth flow in auth.py are exercised by the gated integration suite, not here
-# — hence a threshold below 100. Total sits ~87%.
+# The unit suite runs offline against FakeBackend, and `ApiBackend`'s real-Google calls are
+# covered here through recording doubles rather than left to the gated integration suite —
+# see tests/test_apibackend_contract.py, which asserts the REQUEST each method would send.
+# What remains excluded is named below, line by line, with the reason at the line.
 exclude_lines = ["pragma: no cover", "raise NotImplementedError", "if TYPE_CHECKING:"]
 # A `Protocol` stub body is `...` and there is nothing there to execute - but branch
 # coverage records one as a partial branch (`NN->exit`), so `backend.py`'s 45-method
 # Protocol contributed ~45 phantom misses that no test could ever remove. Excluding them
 # does not hide untested code; it stops the number counting declarations as code. Ported
 # from csa-google-gmail-calendar, which hit this when it set its gate to 100.
-exclude_also = [":\\s*\\.\\.\\.\\s*$"]
-# 91, the MEASURED number, not 85. `TESTING.md`: "a gate below the measured number cannot
-# fail" - and 85 against a real 91 left six points of silent regression room, which is the
-# whole failure this gate exists to prevent. The standard is 100 and this is a ratchet toward
-# it, not a destination: raising it requires covering code, never lowering it to fit.
-fail_under = 96
+exclude_also = [
+    ":\\s*\\.\\.\\.\\s*$",
+    # A version-gated import can never be fully covered, because the gate runs PER VERSION:
+    # on 3.12+ the `typing` arm executes and the `typing_extensions` one does not, and on
+    # 3.10/3.11 the reverse. Excluding the statement is honest where a pragma on either arm
+    # would be a lie on half the matrix. `_schemas.py` has the only one, and what it guards
+    # is real - pydantic cannot introspect `typing.TypedDict` below 3.12 and fails SILENTLY,
+    # returning null structuredContent, which is why the CI matrix exists at all.
+    "if sys\\.version_info",
+]
+# 100. `TESTING.md` says the standard is 100 and that a gate below the measured number cannot
+# fail - this repo spent a long time at 85 against a real 91, which left six points of silent
+# regression room, which is the whole failure the gate exists to prevent.
+#
+# It is not lowered to accommodate new code. Every exception is a `# pragma` at the line that
+# needs it, carrying the reason there - which is reviewable, greppable, and attached to the
+# thing it excuses, unlike a threshold that excuses whatever happens to be uncovered. The
+# exclusions in force are: Windows-only ACL helpers (no Windows runner until 1.0.0), a
+# version-gated import that no single Python can fully execute, and four branches that cannot
+# be reached today and are kept for the day they can - each named where it sits.
+fail_under = 100

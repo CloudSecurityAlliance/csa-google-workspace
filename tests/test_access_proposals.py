@@ -234,3 +234,52 @@ class TestTheModelParsesWhatDriveActuallySends:
         rather than raising halfway through a list of otherwise-fine proposals."""
         p = AccessProposal.from_api({"proposalId": "x"})
         assert p.id == "x" and p.requester_email == "" and p.roles_and_views == []
+
+
+class TestTheToolReportsWhichWayItWent:
+    """`resolve_access_proposal` through the MCP layer. `approve` is required and has no
+    default - there is no third state, because a call that reached this tool has already
+    decided something - and the reply has to say WHICH decision was recorded.
+
+    The deny branch had never executed. That is the half where a wrong `detail` is worst:
+    "granted reader on proposal p1" after a denial is a sentence a model will repeat to the
+    person who asked, and nobody looks at Drive to check.
+    """
+
+    @staticmethod
+    def server():
+        import asyncio
+
+        from csa_google_workspace.mcp._config import settings_from_env
+        from csa_google_workspace.mcp.server import create_server
+
+        app = create_server(lambda: Workspace(backend()),
+                            settings=settings_from_env({"CSA_GW_ALLOWLIST_MODIFY": "*",
+                                                        "CSA_GW_ALLOWLIST_READ": "*"}))
+
+        def call(**args):
+            return asyncio.run(
+                app.call_tool("resolve_access_proposal", args)).structured_content
+        return call
+
+    def test_approving_says_what_role_was_granted(self):
+        out = self.server()(fileId=DOC, proposalId="p1", approve=True, role="reader")
+        assert "granted reader on proposal p1" in out["detail"]
+
+    def test_denying_says_denied_and_names_no_role(self):
+        """A denial grants nothing, so naming a role would describe access that does not
+        exist - and `role` still has to be accepted as an argument, because the caller does
+        not know in advance which way the model will go."""
+        out = self.server()(fileId=DOC, proposalId="p2", approve=False, role="writer")
+
+        assert "denied proposal p2" in out["detail"]
+        assert "writer" not in out["detail"] and "granted" not in out["detail"]
+
+    def test_both_directions_report_one_change(self):
+        """`occurrences_changed` is what a caller totals up across a batch. A denial that
+        reported zero would read as "nothing happened", and the proposal is gone either way."""
+        call = self.server()
+        assert call(fileId=DOC, proposalId="p1", approve=True, role="reader")[
+            "occurrences_changed"] == 1
+        assert call(fileId=DOC, proposalId="p2", approve=False, role="reader")[
+            "occurrences_changed"] == 1
