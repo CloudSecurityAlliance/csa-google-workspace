@@ -59,7 +59,7 @@ looked for, which is the reason this table exists.
 | `demo/` | 2026-08-27 · claude-code · 83% of lines |
 | `tests/` as code | **partial** — 13/139 at 2026-09-01 · 15% of lines |
 | `.github/workflows/` | 2026-09-01 · codex · 94% of lines |
-| packaging and secret-scanning config | 2026-08-27 · claude-code · 82% of lines |
+| packaging and secret-scanning config | 2026-08-27 · claude-code · 80% of lines |
 | `scripts/` | **partial** — 6/7 at 2026-09-01 · 76% of lines |
 | `experiments/` | **not yet audited** |
 | `research/` | **not yet audited** |
