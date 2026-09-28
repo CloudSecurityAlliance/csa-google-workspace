@@ -194,11 +194,11 @@ _WINDOWS = os.name == "nt"
 _WINDOWS_ROOT_EQUIVALENTS = ("NT AUTHORITY\\SYSTEM", "BUILTIN\\Administrators")
 
 
-def _current_windows_principal() -> str:  # pragma: no cover - Windows-only; CI is ubuntu (see tests/test_windows_acl.py, NOT A TEST YET)
+def _current_windows_principal() -> str:  # pragma: no cover - Windows-only; see tests/test_windows_acl.py
     return f"{os.environ.get('USERDOMAIN', '')}\\{os.environ.get('USERNAME', '')}".lstrip("\\")
 
 
-def _icacls(*args: str) -> subprocess.CompletedProcess:  # pragma: no cover - Windows-only; CI is ubuntu (see tests/test_windows_acl.py, NOT A TEST YET)
+def _icacls(*args: str) -> subprocess.CompletedProcess:  # pragma: no cover - Windows-only
     # Fixed argv, no shell, and every path is one this process constructed.
     return subprocess.run(["icacls", *args], capture_output=True, text=True,  # nosec B603 B607
                           check=False)
@@ -247,7 +247,7 @@ def _windows_owner_only(path: str) -> bool | None:  # pragma: no cover - Windows
     return not _strays(principals)
 
 
-def _read_acl(path: str) -> tuple[list[str], bool] | None:  # pragma: no cover - Windows-only; CI is ubuntu (see tests/test_windows_acl.py, NOT A TEST YET)
+def _read_acl(path: str) -> tuple[list[str], bool] | None:  # pragma: no cover - Windows-only
     """(explicit principals, any inherited ACE) from icacls, or None if it could not be read.
 
     One parser, because `file_is_owner_only` and `_harden` ask the same question of the same
@@ -294,7 +294,7 @@ def _is_own_logon_session(principal: str) -> bool:
     return principal.upper().startswith("NT AUTHORITY\\LOGONSESSIONID_")
 
 
-def _strays(principals: list[str]) -> list[str]:  # pragma: no cover - Windows-only; CI is ubuntu (see tests/test_windows_acl.py, NOT A TEST YET)
+def _strays(principals: list[str]) -> list[str]:  # pragma: no cover - Windows-only; see tests/test_windows_acl.py
     """Principals on the ACL that are neither the owner, a root-equivalent, nor its own session."""
     allowed = {_current_windows_principal().lower(),
                *(p.lower() for p in _WINDOWS_ROOT_EQUIVALENTS)}
@@ -302,7 +302,7 @@ def _strays(principals: list[str]) -> list[str]:  # pragma: no cover - Windows-o
             if p.lower() not in allowed and not _is_own_logon_session(p)]
 
 
-def _unexpected_principals(path: str) -> list[str]:  # pragma: no cover - Windows-only; CI is ubuntu (see tests/test_windows_acl.py, NOT A TEST YET)
+def _unexpected_principals(path: str) -> list[str]:  # pragma: no cover - Windows-only; see tests/test_windows_acl.py
     acl = _read_acl(path)
     return _strays(acl[0]) if acl else []
 
@@ -315,7 +315,7 @@ def _harden(path: str, fd: int | None = None) -> None:
     and on Windows the evidence did not hold. `icacls /inheritance:r /grant:r <user>:F` is the
     real equivalent: it drops the inherited ACL and leaves exactly one ACE.
     """
-    if _WINDOWS:  # pragma: no cover - Windows-only branch; CI is ubuntu (tests/test_windows_acl.py)
+    if _WINDOWS:  # pragma: no cover - Windows-only; see tests/test_windows_acl.py
         result = _icacls(path, "/inheritance:r", "/grant:r", f"{_current_windows_principal()}:F")
         # AND THEN REMOVE WHATEVER ELSE IS THERE. `/inheritance:r` drops only INHERITED aces and
         # `/grant:r` replaces only the ace for the principal named, so anything explicit that
