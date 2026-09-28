@@ -34,6 +34,19 @@ updates:
   # exact shape (17 markers -> 0) and fails the same way for a hand-edit. If these PRs keep
   # arriving, the next lever is dropping the `pip` entry entirely - which costs advisory coverage
   # of the pyproject ranges, so it is a trade rather than a fix. Tracked in #467.
+  #
+  # THIRD OCCURRENCE, 2026-09-28: PR #478 bumped `pydantic-core` 2.46.5 -> 2.49.0 again, and
+  # again nothing could install it - `pydantic` 2.13.5 is the newest release on PyPI and pins
+  # `pydantic-core==2.46.5`. #467 diagnosed exactly this and predicted the recurrence ("the core
+  # is published ahead of its wrapper, as it usually is"), proposed the `ignore` below, and was
+  # closed without it. So it happened again, cost another review, and the six *landable* bumps
+  # in the same PR were held hostage to the one that could not.
+  #
+  # The `ignore` is narrow on purpose. Dropping the whole `pip` entry was the other lever and it
+  # costs advisory coverage of the pyproject ranges, which is the thing Dependabot is actually
+  # good at. Ignoring the specific packages whose version is CHOSEN BY THEIR PARENT keeps the
+  # advisories and stops the unsatisfiable PRs. Add to this list when the same shape appears:
+  # the tell is a package whose parent pins it with `==`.
   - package-ecosystem: pip
     directory: /
     schedule:
@@ -41,3 +54,7 @@ updates:
     groups:
       python:
         patterns: ["*"]
+    ignore:
+      # Pinned exactly by `pydantic`, which ships behind it. A bump here is never installable
+      # on its own; `scripts/lock.sh --upgrade` takes it the moment a pydantic release admits it.
+      - dependency-name: "pydantic-core"
