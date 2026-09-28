@@ -67,7 +67,10 @@ def register_feedback_tools(app: MCPServer, settings: Settings) -> None:
         issue. Anything about the documents themselves the user must describe in their own
         words - deliberately, because a file id in a public tracker is a working link.
         """
-        env = describe_environment()
+        # The one network call this server makes that is not to Google, and the only
+        # caller that asks for it - see `describe_environment` for why it lives here
+        # rather than at startup or on every error.
+        env = describe_environment(check_pypi=True)
         policy = settings.policy or Policy.default()
         # `authorized` is a boolean about a file's existence, and the path is not returned:
         # a home directory is a username, and a username is more than a bug report needs.
