@@ -791,3 +791,189 @@ def test_a_response_without_a_user_node_is_an_empty_dict_not_none():
     account into an AttributeError two layers up."""
     backend = ApiBackend(_ServicesWithAbout(_About({})))
     assert backend.get_about_user() == {}
+
+
+# --- the other half of the census: every READ reaches the error translator -----------------
+#
+# `WRITE_CALLS` above exists because a write that skips `_errors.call` silently gains a retry
+# that can double-apply. Reads have the mirror-image problem and it is not smaller: a read that
+# skips `_errors.call` lets a raw `googleapiclient.errors.HttpError` escape into the MCP layer,
+# where it arrives as a traceback rather than as "that file is not shared with this account" or
+# "the Drive API is not enabled on this project, here is the link to enable it".
+#
+# Every typed exception this library raises about Drive is produced in `_errors.call`. A method
+# that does not go through it produces none of them.
+
+READ_CALLS = {
+    "get_about_user":          lambda b: b.get_about_user(),
+    "get_file_metadata":       lambda b: b.get_file_metadata("f"),
+    "get_drive":               lambda b: b.get_drive("d"),
+    "search_files":            lambda b: b.search_files("name contains 'x'"),
+    "list_comments":           lambda b: b.list_comments("f"),
+    "get_comment":             lambda b: b.get_comment("f", "c"),
+    "list_permissions":        lambda b: b.list_permissions("f"),
+    "list_access_proposals":   lambda b: b.list_access_proposals("f"),
+    "list_file_labels":        lambda b: b.list_file_labels("f"),
+    "get_label_definition":    lambda b: b.get_label_definition("l"),
+    "get_document":            lambda b: b.get_document("f"),
+    "get_spreadsheet":         lambda b: b.get_spreadsheet("f"),
+    "get_presentation":        lambda b: b.get_presentation("f"),
+    "get_values":              lambda b: b.get_values("f", "A1:B2"),
+    "get_sheet_notes":         lambda b: b.get_sheet_notes("f"),
+    "export_file":             lambda b: b.export_file("f", "text/plain"),
+    "download_file":           lambda b: b.download_file("f"),
+}
+
+# `copy_file` belongs to neither list, and finding that out is the point of the census.
+#
+# It CREATES a Drive file, so it is non-idempotent for the same reason every write is: a
+# retried 5xx that had already landed leaves two copies. But it is not in `WRITE_CALLS`,
+# because that set is derived from `access == MODIFY` and `copy_file`'s gate is
+# `Gate(capability="file.create", access="read", file_scoped=True)` - the file it is
+# CHECKED against is the source, which it only reads.
+#
+# That asymmetry with `create_file` (`access="modify"`, `file_scoped=False`) is deliberate as
+# far as the allowlist goes, and it is noted in #491 for the security-audit pass rather than
+# changed here: under READ=* with a narrow MODIFY list, `copy_file` can duplicate any readable
+# file, which is a creation the modify allowlist does not bound.
+CREATES_WITHOUT_A_MODIFY_GATE = {
+    "copy_file": lambda b: b.copy_file("f"),
+}
+
+
+def _public_methods() -> set[str]:
+    import inspect
+
+    return {name for name, _ in inspect.getmembers(ApiBackend, inspect.isfunction)
+            if not name.startswith("_")}
+
+
+def test_every_public_backend_method_is_accounted_for():
+    """Derived, like the write census, and for the same reason: a method added to `ApiBackend`
+    and to no list here is a method nobody tests, and nothing says so. Adding one must be a
+    deliberate act of putting it in a list."""
+    known = (set(WRITE_CALLS) | set(READ_CALLS) | set(CREATES_WITHOUT_A_MODIFY_GATE)
+             | set(NOT_IMPLEMENTED_SO_NO_REQUEST))
+    unaccounted = sorted(_public_methods() - known)
+    assert unaccounted == [], (
+        f"these ApiBackend methods appear in no census: {unaccounted}. Add each to "
+        f"WRITE_CALLS or READ_CALLS - an untested backend method reaches Google untranslated.")
+
+    stale = sorted(known - _public_methods() - set(NOT_IMPLEMENTED_SO_NO_REQUEST))
+    assert stale == [], f"these census entries name methods that no longer exist: {stale}"
+
+
+def test_every_read_goes_through_the_error_translator(monkeypatch):
+    """The mirror of `test_all_writes_are_non_idempotent`. Every typed exception this library
+    raises about Drive - NotFoundError, AccessError, the "enable the API" message with its
+    activation URL - is produced inside `_errors.call`. A read that bypasses it hands the MCP
+    layer a raw HttpError, which surfaces as a traceback and tells the user nothing."""
+    reached: set[str] = set()
+    current = [""]
+
+    def fake_call(fn, *args, idempotent=True, _sleep=None, **kwargs):
+        reached.add(current[0])
+        return {}
+
+    monkeypatch.setattr("csa_google_workspace.backend._errors.call", fake_call)
+    b = ApiBackend(_Chain())
+    for name, call in sorted({**READ_CALLS, **CREATES_WITHOUT_A_MODIFY_GATE}.items()):
+        current[0] = name
+        call(b)
+
+    missed = sorted((set(READ_CALLS) | set(CREATES_WITHOUT_A_MODIFY_GATE)) - reached)
+    assert missed == [], (
+        f"these reads never reached _errors.call: {missed}. Each returns a raw HttpError to "
+        f"the caller instead of a typed, actionable one.")
+
+
+def test_reads_keep_their_retry(monkeypatch):
+    """The other mirror. `idempotent=False` costs a call its 5xx retry, correctly for a write -
+    the mutation may already have landed - and pointlessly for a read, where retrying a
+    transient 503 is exactly the right thing and a copy-pasted flag would quietly stop it."""
+    flags: dict[str, bool] = {}
+    current = [""]
+
+    def fake_call(fn, *args, idempotent=True, _sleep=None, **kwargs):
+        flags[current[0]] = idempotent
+        return {}
+
+    monkeypatch.setattr("csa_google_workspace.backend._errors.call", fake_call)
+    b = ApiBackend(_Chain())
+    for name, call in sorted(READ_CALLS.items()):
+        current[0] = name
+        call(b)
+
+    wrong = sorted(n for n, flag in flags.items() if flag is False)
+    assert wrong == [], (
+        f"these reads were marked non-idempotent: {wrong}. A read is safe to retry, and the "
+        f"flag costs it the 5xx retry it should have.")
+
+
+def test_copy_is_non_idempotent_even_though_it_is_not_modify_gated(monkeypatch):
+    """The gate answers "which allowlist applies"; the flag answers "is this safe to retry".
+    They are different questions and `copy_file` is where they diverge - it is checked against
+    the source file it reads, and it creates a new one. A retried 5xx that had already landed
+    leaves the person with two copies and no way to tell which run made which."""
+    seen = {}
+
+    def fake_call(fn, *args, idempotent=True, _sleep=None, **kwargs):
+        seen["idempotent"] = idempotent
+        return {}
+
+    monkeypatch.setattr("csa_google_workspace.backend._errors.call", fake_call)
+    CREATES_WITHOUT_A_MODIFY_GATE["copy_file"](ApiBackend(_Chain()))
+
+    assert seen["idempotent"] is False
+
+
+# --- the field-mask strip, at depth -------------------------------------------------------
+#
+# Drive accepts `mentionedEmailAddresses` and `assigneeEmailAddress` on a READ and refuses them
+# on a WRITE's response mask, for comments and replies alike (measured 2026-09-05). Asking for
+# one is a hard `400 Invalid field selection`, which is how v0.47.0 broke every comment write in
+# this library for five releases - FakeBackend does not validate masks, so the whole unit suite
+# was exercising a double that accepts anything.
+#
+# The strip is BY NAME AND AT EVERY DEPTH. The first version stripped only the top level, on the
+# assumption that a nested one could not matter, and live Google rejected it immediately.
+
+class TestTheWriteMask:
+    def test_a_refused_field_is_stripped_at_the_top_level(self):
+        assert ApiBackend._write_mask("id,mentionedEmailAddresses,content") == "id,content"
+
+    def test_a_refused_field_is_stripped_inside_a_nested_spec(self):
+        """The half live Google caught. `replies(mentionedEmailAddresses)` is refused exactly
+        as the bare form is, because the refusal is by name rather than by position."""
+        got = ApiBackend._write_mask("id,replies(id,mentionedEmailAddresses,content)")
+        assert got == "id,replies(id,content)"
+
+    def test_a_spec_emptied_by_the_strip_is_dropped_entirely(self):
+        """`replies()` is not valid syntax. A spec whose every field was refused has to
+        disappear, not become an empty pair of brackets."""
+        assert ApiBackend._write_mask("id,replies(mentionedEmailAddresses)") == "id"
+
+    def test_a_whole_spec_named_after_a_refused_field_is_dropped_with_its_contents(self):
+        """The branch where the REFUSED NAME is the one carrying the brackets. Keeping its
+        inner fields would ask for the refused thing under a different shape."""
+        got = ApiBackend._write_mask("id,assigneeEmailAddress(displayName),content")
+        assert got == "id,content"
+
+    def test_nesting_deeper_than_one_level_is_stripped_too(self):
+        got = ApiBackend._write_mask("a(b(c,assigneeEmailAddress),d)")
+        assert got == "a(b(c),d)"
+
+    def test_an_unbalanced_mask_does_not_hang_or_raise(self):
+        """Not a mask this library builds - the constants are literals - but the parser scans
+        to the end looking for a closing bracket that is not there. It has to terminate and
+        return something, because a crash inside mask construction would break every write
+        with a traceback that names none of them."""
+        assert isinstance(ApiBackend._write_mask("id,replies(content"), str)
+
+    def test_the_real_masks_come_through_with_the_two_fields_gone(self):
+        """The derivation this exists for, against the constants actually used."""
+        for mask in (ApiBackend._CF, ApiBackend._RF):
+            stripped = ApiBackend._write_mask(mask)
+            for refused in ApiBackend._WRITE_REFUSED:
+                assert refused not in stripped
+            assert "id" in stripped, "the strip took the whole mask"
