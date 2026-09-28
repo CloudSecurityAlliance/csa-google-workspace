@@ -16,9 +16,12 @@ Same data, different destination, different answer.
 from __future__ import annotations
 
 import itertools
+import json
 import os
 import platform
 import sys
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 
 from . import __version__
@@ -79,6 +82,63 @@ def _package_version(name: str) -> str | None:
         return None
 
 
+DIST_NAME = "csa-google-workspace"
+_PYPI_URL = f"https://pypi.org/pypi/{DIST_NAME}/json"
+# Short on purpose: this runs while somebody waits for a bug report, and a slow index must cost
+# them a line saying "could not check" rather than the tool appearing to hang.
+_TIMEOUT_SECONDS = 3.0
+
+
+def latest_on_pypi(timeout: float = _TIMEOUT_SECONDS) -> str | None:
+    """The newest version on PyPI, or `None` if that could not be established.
+
+    Every failure is `None` and none is raised. This adds a courtesy line to a bug report: an
+    airgapped machine, a proxy, a DNS failure, a 500 from the index or a JSON shape that changed
+    must all cost the reader that one line, never the report and never the tool.
+
+    The URL is a module constant and deliberately NOT a parameter. The sibling
+    `csa-google-gmail-calendar` took one for testability and bandit flagged it (B310): a
+    caller-supplied URL reaches `urlopen`, which accepts `file://` and every other scheme urllib
+    knows, turning a version check into a file-read primitive. Tests patch `urlopen` itself, so
+    the parameter was a hole opened for a convenience nothing wanted.
+    """
+    try:
+        # B310 is about a caller-supplied URL. `_PYPI_URL` is a module constant with a literal
+        # https scheme and nothing can influence it.
+        resp = urllib.request.urlopen(_PYPI_URL, timeout=timeout)  # noqa: S310  # nosec B310
+        with resp as response:
+            body = json.load(response)
+        version = body["info"]["version"]
+    except (urllib.error.URLError, OSError, ValueError, KeyError, TypeError):
+        return None
+    return version if isinstance(version, str) and version else None
+
+
+def _as_tuple(version: str) -> tuple[int, ...] | None:
+    """`"0.54.0"` -> `(0, 54, 0)`, or `None` for anything not plainly numeric.
+
+    Not a PEP 440 parser and not a new dependency. The only question is whether the index is
+    ahead of us, and a version this cannot read becomes *unknown* rather than a guess - a
+    pre-release or a local segment must not report "you are behind" when it may be the opposite.
+    """
+    try:
+        return tuple(int(part) for part in version.strip().split("."))
+    except (ValueError, AttributeError):
+        return None
+
+
+def _upgrade_command(installed_via: str) -> str:
+    """The command THIS install needs. "You are out of date" is half an answer; the half that
+    saves time is which of four commands to run. An editable checkout gets `git pull`, because
+    installing over somebody's working tree is wrong advice and possibly destructive to whatever
+    is uncommitted in it."""
+    return {
+        "pipx": f"pipx upgrade {DIST_NAME}",
+        "uv tool": f"uv tool upgrade {DIST_NAME}",
+        "editable checkout or source tree": "git pull (this is a working tree, not a release)",
+    }.get(installed_via, f"pip install --upgrade '{DIST_NAME}[mcp]'")
+
+
 @dataclass(frozen=True)
 class Environment:
     """What is running, where. Safe to paste into a public issue."""
@@ -90,6 +150,11 @@ class Environment:
     architecture: str
     mcp_sdk_version: str | None
     installed_via: str
+    # None = not checked, or could not be checked. `is_outdated` stays None in that case rather
+    # than False, because False reads as "you are current" - a claim this could not make.
+    latest_version: str | None = None
+    is_outdated: bool | None = None
+    upgrade_command: str = ""
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, object]:
@@ -101,13 +166,27 @@ class Environment:
             "architecture": self.architecture,
             "mcp_sdk_version": self.mcp_sdk_version,
             "installed_via": self.installed_via,
+            "latest_version": self.latest_version,
+            "is_outdated": self.is_outdated,
+            "upgrade_command": self.upgrade_command,
             "notes": list(self.notes),
         }
 
     def as_markdown(self) -> str:
         """A block to paste under "Environment" in an issue."""
+        # The version line says whether it is CURRENT, not just what it is. A report written in
+        # detail against something fixed three releases ago costs the reporter's time first and
+        # the maintainer's second, and the version alone never prompted anyone to check.
+        version = self.server_version
+        if self.is_outdated:
+            version += f"  ** OUT OF DATE - PyPI has {self.latest_version} **"
+        elif self.latest_version is not None:
+            version += "  (latest)"
+        # No third branch. "Could not check" is carried by `notes`, which the report already
+        # renders - and an offline `describe_environment()` never asked, so a line implying it
+        # tried and failed would be false for the commoner of the two callers.
         rows = [
-            ("csa-google-workspace", self.server_version),
+            ("csa-google-workspace", version),
             ("Python", f"{self.python_version} ({self.python_implementation})"),
             ("OS", self.os),
             ("Architecture", self.architecture),
@@ -164,10 +243,33 @@ def _installed_via() -> str:
     return "editable checkout or source tree"
 
 
-def describe_environment() -> Environment:
-    """Collect the environment facts. No network, no filesystem beyond this package."""
+def describe_environment(check_pypi: bool = False) -> Environment:
+    """Collect the environment facts. **Offline unless `check_pypi=True`.**
+
+    Where the version check runs is the design. Not at startup: a stdio server must not reach
+    the network because it booted, and a launch that waits on PyPI hangs when PyPI is slow. Not
+    on errors either - an ordinary refusal (policy denied, not found) is an error here, and
+    checking an index on each would be wrong and noisy. Filing a report is already a deliberate
+    act and being current is exactly what matters then, so `report_a_problem` is the only caller
+    that passes True.
+    """
     installed_via = _installed_via()
+    latest = latest_on_pypi() if check_pypi else None
+    outdated: bool | None = None
+    if latest is not None:
+        here, there = _as_tuple(__version__), _as_tuple(latest)
+        if here is not None and there is not None:
+            outdated = there > here
     notes: list[str] = []
+    if outdated:
+        notes.append(f"This is {__version__}; PyPI has {latest}. Upgrade and retry before "
+                     f"filing - the problem may already be fixed. Run: "
+                     f"{_upgrade_command(installed_via)}")
+    elif check_pypi and latest is None:
+        # Said out loud rather than left blank: "could not check" and "you are current" are
+        # different facts, and a reader who sees nothing will assume the second.
+        notes.append("Could not reach PyPI to check for a newer version, so this report may be "
+                     "against an already-fixed release. Worth upgrading before filing.")
     # A note has to be able to fire, and has to change what the reader does. This one does
     # both: a shared environment is where another project's pin silently holds this package at
     # an old version, and "upgrade first" is then the right first reply to the report. (The
@@ -188,5 +290,8 @@ def describe_environment() -> Environment:
         architecture=platform.machine() or "unknown",
         mcp_sdk_version=_package_version("mcp"),
         installed_via=installed_via,
+        latest_version=latest,
+        is_outdated=outdated,
+        upgrade_command=_upgrade_command(installed_via),
         notes=notes,
     )
