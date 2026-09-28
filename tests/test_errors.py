@@ -174,3 +174,68 @@ def test_call_clamps_retry_after_to_60_seconds():
         return {"ok": True}
     assert _errors.call(flaky_429_large_retry_after, _sleep=lambda s: sleeps.append(s)) == {"ok": True}
     assert sleeps == [60]  # Should be clamped to 60, not 999
+
+
+class TestABodyThatIsNotWhatGoogleUsuallySends:
+    """The three parsers all swallow malformed input and return "nothing known".
+
+    That is the right posture and it is worth saying why: these run while an error is ALREADY
+    being raised. A parser that threw here would replace a 403 the caller could act on with a
+    JSONDecodeError from inside the error handler - the original status, reason and message
+    all lost, and the traceback pointing at this file rather than at the call that failed.
+
+    So every one of them degrades to a less specific error, never to a different one.
+    """
+
+    @pytest.mark.parametrize("content", [
+        pytest.param(b"<html>502 Bad Gateway</html>", id="html-from-a-proxy"),
+        pytest.param(b"", id="empty"),
+        pytest.param(b"{", id="truncated-json"),
+        pytest.param(b'{"error": "a string, not an object"}', id="right-json-wrong-shape"),
+        pytest.param(b'{"error": {"errors": []}}', id="no-errors-entries"),
+    ])
+    def test_an_unparseable_body_yields_no_reason_and_no_message(self, content):
+        from googleapiclient.errors import HttpError
+
+        reason, message = _errors._reason_and_message(HttpError(FakeResp(403), content))
+        assert (reason, message) == ("", "")
+
+    def test_it_still_translates_into_an_actionable_error(self):
+        """The point of the above. An HTML error page from a proxy still becomes a typed
+        exception carrying the STATUS, which is the part that tells a caller whether to
+        retry, re-authorize, or stop."""
+        from googleapiclient.errors import HttpError
+
+        with pytest.raises(exc.CsaWorkspaceError) as ei:
+            _errors.call(lambda: (_ for _ in ()).throw(
+                HttpError(FakeResp(503), b"<html>Service Unavailable</html>")))
+        assert "503" in str(ei.value)
+
+    @pytest.mark.parametrize("content", [
+        pytest.param(b"not json at all", id="not-json"),
+        pytest.param(b'{"error": {"details": [{"reason": "SOMETHING_ELSE"}]}}',
+                     id="details-without-service-disabled"),
+        pytest.param(b'{"error": {"details": "a string"}}', id="details-wrong-type"),
+    ])
+    def test_service_disabled_details_are_absent_rather_than_guessed(self, content):
+        """`None` means "this is not a disabled-API 403". Returning a placeholder would make
+        every 403 render as "enable the Drive API", which is the wrong instruction for the
+        far commoner case of the file simply not being shared with this account."""
+        from googleapiclient.errors import HttpError
+
+        assert _errors._service_disabled_details(HttpError(FakeResp(403), content)) is None
+
+    def test_a_response_with_no_retry_after_header_is_none(self):
+        """Absent, not zero. Zero means "retry immediately", and telling a caller to retry a
+        429 immediately is how a rate limit becomes a ban."""
+        from googleapiclient.errors import HttpError
+
+        no_header = HttpError(FakeRespWithHeaders(429, {}), b"{}")
+        assert _errors._retry_after(no_header) is None
+
+    def test_a_response_object_without_headers_at_all_is_none(self):
+        """`FakeResp` has no `.get`. Some transports hand back an object that is not
+        dict-like, and reaching for a header on it raises AttributeError."""
+        from googleapiclient.errors import HttpError
+
+        assert _errors._retry_after(HttpError(FakeResp(429), b"{}")) is None
