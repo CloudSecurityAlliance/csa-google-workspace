@@ -156,4 +156,4 @@ exclude_also = [":\\s*\\.\\.\\.\\s*$"]
 # fail" - and 85 against a real 91 left six points of silent regression room, which is the
 # whole failure this gate exists to prevent. The standard is 100 and this is a ratchet toward
 # it, not a destination: raising it requires covering code, never lowering it to fit.
-fail_under = 95
+fail_under = 96

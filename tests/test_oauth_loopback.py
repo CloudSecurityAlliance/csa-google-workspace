@@ -205,3 +205,93 @@ class TestClosingTheListenerIsQuiet:
         finally:
             threading.excepthook = hook
         assert errors == []
+
+
+class TestWaitingForTheRedirect:
+    """`Loopback.wait` - the call `authenticate` makes off-thread while the browser is open."""
+
+    def test_it_returns_the_redirect_once_it_arrives(self):
+        loopback = _auth_flow.start_loopback()
+        try:
+            uri = f"http://127.0.0.1:{loopback.port}/?code=THECODE&state=THESTATE"
+            threading.Thread(target=lambda: urllib.request.urlopen(uri, timeout=5),
+                             daemon=True).start()
+            got = loopback.wait(5.0)
+        finally:
+            loopback.close()
+
+        assert got is not None
+        assert "code=THECODE" in got and "state=THESTATE" in got
+
+    def test_nothing_arriving_returns_none_rather_than_blocking_forever(self):
+        """The caller turns None into "no response from the browser within 5 minutes". A
+        `wait` that could not time out would hold the tool call open indefinitely, and the
+        listener with it."""
+        loopback = _auth_flow.start_loopback()
+        try:
+            assert loopback.wait(0.05) is None
+        finally:
+            loopback.close()
+
+    def test_closing_twice_is_not_an_error(self):
+        """`authenticate` closes in a `finally`, and the CLI path closes too. Neither knows
+        about the other, so the second `server_close()` meets an already-closed socket - which
+        must not turn a completed login into a traceback."""
+        loopback = _auth_flow.start_loopback()
+        loopback.close()
+        loopback.close()          # must not raise
+
+
+class TestFinishingTheExchange:
+    """`finish` - the last step, and the one carrying the CSRF check."""
+
+    class FakeFlow:
+        def __init__(self):
+            self.fetched_with = None
+            self.credentials = _FakeCredentials()
+
+        def fetch_token(self, **kwargs):
+            self.fetched_with = kwargs
+
+    def test_the_whole_redirect_uri_is_handed_over_not_a_bare_code(self, tmp_path):
+        """oauthlib validates the `state` parameter out of `authorization_response`, and that
+        check is what stops an injected authorization code. Pulling the code out and passing
+        it alone would still work - which is what makes losing this the easy mistake in
+        hand-rolling the flow."""
+        flow = self.FakeFlow()
+        redirect = "http://127.0.0.1:54321/?code=THECODE&state=THESTATE"
+        _auth_flow.finish(flow, redirect, str(tmp_path / "token.json"))
+
+        assert flow.fetched_with == {"authorization_response": redirect}
+        assert "code" not in flow.fetched_with, "a bare code would skip the state check"
+
+    def test_the_token_is_written_with_the_usual_hardening(self, tmp_path):
+        """Through `_write_token`, not `open`. That is where owner-only permissions and the
+        private parent directory live, and a second way of writing this file would be a second
+        place for them to be forgotten."""
+        import os
+        import stat
+
+        token = tmp_path / "nested" / "token.json"
+        _auth_flow.finish(self.FakeFlow(), "http://127.0.0.1/?code=c&state=s", str(token))
+
+        assert token.exists()
+        mode = stat.S_IMODE(os.stat(token).st_mode)
+        assert mode & (stat.S_IRWXG | stat.S_IRWXO) == 0, f"group/other can read it: {mode:o}"
+
+
+class _FakeCredentials:
+    def to_json(self):
+        return '{"token": "at", "refresh_token": "rt"}'
+
+
+def test_the_redirect_uri_names_the_port_that_was_bound():
+    """The URI handed to `build_flow` and the socket being listened on are the same fact
+    stated twice. A mismatch sends the browser to a closed port, and the login then times out
+    with nothing anywhere saying why."""
+    loopback = _auth_flow.start_loopback()
+    try:
+        assert loopback.redirect_uri_base == f"http://127.0.0.1:{loopback.port}/"
+        assert loopback.port != 0, "port 0 means 'pick one', not a port anything can reach"
+    finally:
+        loopback.close()
