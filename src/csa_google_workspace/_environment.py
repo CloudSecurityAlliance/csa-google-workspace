@@ -180,11 +180,19 @@ class Environment:
         version = self.server_version
         if self.is_outdated:
             version += f"  ** OUT OF DATE - PyPI has {self.latest_version} **"
-        elif self.latest_version is not None:
+        elif self.is_outdated is False:
             version += "  (latest)"
+        # `is_outdated is False`, NOT `latest_version is not None`. The two differ in one
+        # state and it is the one that matters: PyPI answered with something `_as_tuple`
+        # cannot read - a pre-release, a `.post`, a local segment - so `latest_version` is set
+        # while `is_outdated` is deliberately None. Branching on the former printed
+        # "(latest)" there, which is the exact false reassurance the None was chosen to avoid,
+        # and it said so about a machine that may well have been behind.
+        #
         # No third branch. "Could not check" is carried by `notes`, which the report already
         # renders - and an offline `describe_environment()` never asked, so a line implying it
-        # tried and failed would be false for the commoner of the two callers.
+        # tried and failed would be false for the commoner of the two callers. An unreadable
+        # answer gets no annotation at all: it was asked, and the answer means nothing.
         rows = [
             ("csa-google-workspace", version),
             ("Python", f"{self.python_version} ({self.python_implementation})"),

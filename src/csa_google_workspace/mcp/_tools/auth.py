@@ -43,10 +43,20 @@ def _auth_status_payload(token_path: str, read_only: bool,
     `token_path_for`, not the raw path: a read-only posture reads a SEPARATE cache (#185), and
     reporting on the file the server would not actually read is the one wrong answer this
     function could give while looking right.
+
+    EXPANDED ONCE, here, exactly as `load_cached_credentials` does it (#490). The default
+    token path is `~/.csa_google_workspace/token.json`, and this used to expand it for the
+    existence check and then hand `_read_cached` the raw `~` form - which does not expand it,
+    finds nothing, and returns None. So every default install with a perfectly good credential
+    was told "the credential cached there is not usable. Call `authenticate` to log in again."
+
+    The bug is the shape this tool exists to avoid: `auth_status` predicts what
+    `load_cached_credentials` would say without making its network call, so the two disagreeing
+    about WHICH FILE they read makes the prediction worthless while it still looks confident.
     """
-    path = token_path_for(token_path, read_only)
+    path = os.path.expanduser(token_path_for(token_path, read_only))
     project = _auth.client_project_id(client_secrets)
-    if not os.path.exists(os.path.expanduser(path)):
+    if not os.path.exists(path):
         return {"status": "no_credential", "token_path": path, "client_project": project,
                 "detail": f"No credential cached at {path}. Call `authenticate` to log in."}
     try:

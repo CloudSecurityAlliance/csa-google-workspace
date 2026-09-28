@@ -111,3 +111,22 @@ class TestDescribeEnvironment:
         assert "(latest)" not in got.as_markdown()
         assert "OUT OF DATE" not in got.as_markdown()
         assert not any("Could not reach PyPI" in n for n in got.notes)
+
+    @pytest.mark.parametrize("published", ["1.0.0rc1", "2.0.0.post1", "0.55.0+local.1", "latest"])
+    def test_a_version_this_cannot_read_produces_no_verdict_and_no_apology(
+            self, published, monkeypatch):
+        """PyPI answered, and what it said is not plainly numeric. `_as_tuple` is deliberately
+        not a PEP 440 parser - the only question is whether the index is ahead, and guessing
+        at a pre-release could report "you are behind" when it is the opposite.
+
+        So `is_outdated` stays None, and - the part that is easy to get wrong - neither note
+        fires. "Could not reach PyPI" would be false, because it was reached. Silence is the
+        honest answer to a question that was asked and came back unreadable.
+        """
+        monkeypatch.setattr(env, "latest_on_pypi", lambda: published)
+        got = env.describe_environment(check_pypi=True)
+
+        assert got.is_outdated is None
+        assert not any("Could not reach PyPI" in n for n in got.notes)
+        assert not any("Upgrade and retry" in n for n in got.notes)
+        assert "OUT OF DATE" not in got.as_markdown() and "(latest)" not in got.as_markdown()
