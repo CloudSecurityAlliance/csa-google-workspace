@@ -162,8 +162,14 @@ exclude_also = [
     # returning null structuredContent, which is why the CI matrix exists at all.
     "if sys\\.version_info",
 ]
-# The MEASURED number, always. `TESTING.md`: "a gate below the measured number cannot fail" -
-# 85 against a real 91 left six points of silent regression room, which is the whole failure
-# this gate exists to prevent. The standard is 100 and this is a ratchet toward it, not a
-# destination: raising it requires covering code, never lowering it to fit.
-fail_under = 96
+# 100. `TESTING.md` says the standard is 100 and that a gate below the measured number cannot
+# fail - this repo spent a long time at 85 against a real 91, which left six points of silent
+# regression room, which is the whole failure the gate exists to prevent.
+#
+# It is not lowered to accommodate new code. Every exception is a `# pragma` at the line that
+# needs it, carrying the reason there - which is reviewable, greppable, and attached to the
+# thing it excuses, unlike a threshold that excuses whatever happens to be uncovered. The
+# exclusions in force are: Windows-only ACL helpers (no Windows runner until 1.0.0), a
+# version-gated import that no single Python can fully execute, and four branches that cannot
+# be reached today and are kept for the day they can - each named where it sits.
+fail_under = 100

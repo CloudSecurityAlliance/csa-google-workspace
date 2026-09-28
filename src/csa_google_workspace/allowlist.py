@@ -274,8 +274,10 @@ def parse_document_url(text: str) -> str:
     if found is None:
         # Unreachable while `diagnose_url` and the two patterns agree — but not an `assert`:
         # under `python -O` an assert vanishes and this becomes an AttributeError on None,
-        # which is a worse failure than the one it was guarding against.
-        raise AllowlistError(
+        # which is a worse failure than the one it was guarding against. Marked rather than
+        # tested for the same reason it is not an assert: reaching it means the two have
+        # already drifted, and a test that forced them apart would be asserting the drift.
+        raise AllowlistError(                                   # pragma: no cover
             f"{text.strip()!r}: no file id could be extracted, though it passed validation. "
             f"This is a bug in the allowlist parser, not in your configuration.")
     return found.group(1)
