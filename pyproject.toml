@@ -146,4 +146,14 @@ branch = true
 # interactive OAuth flow in auth.py are exercised by the gated integration suite, not here
 # — hence a threshold below 100. Total sits ~87%.
 exclude_lines = ["pragma: no cover", "raise NotImplementedError", "if TYPE_CHECKING:"]
-fail_under = 85
+# A `Protocol` stub body is `...` and there is nothing there to execute - but branch
+# coverage records one as a partial branch (`NN->exit`), so `backend.py`'s 45-method
+# Protocol contributed ~45 phantom misses that no test could ever remove. Excluding them
+# does not hide untested code; it stops the number counting declarations as code. Ported
+# from csa-google-gmail-calendar, which hit this when it set its gate to 100.
+exclude_also = [":\\s*\\.\\.\\.\\s*$"]
+# 91, the MEASURED number, not 85. `TESTING.md`: "a gate below the measured number cannot
+# fail" - and 85 against a real 91 left six points of silent regression room, which is the
+# whole failure this gate exists to prevent. The standard is 100 and this is a ratchet toward
+# it, not a destination: raising it requires covering code, never lowering it to fit.
+fail_under = 91
