@@ -282,7 +282,9 @@ class TestFinishingTheExchange:
         # could only ever pass on one platform; asking the question gets the mode check on
         # POSIX and the icacls ACL check on Windows, which is the property either way.
         # `is True` deliberately: `None` means unknown, and unknown is not secure.
-        assert auth.file_is_owner_only(str(token)) is True,             "the token is readable by someone other than its owner"
+        assert auth.file_is_owner_only(str(token)) is True, (
+            "the token is readable by someone other than its owner"
+        )
 
 
 class _FakeCredentials:
