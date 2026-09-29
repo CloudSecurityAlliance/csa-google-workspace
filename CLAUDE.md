@@ -245,7 +245,7 @@ pytest -q tests/test_cellmap.py::test_location_from_ref_computes_row_col
 pytest -q -k cellmap
 
 # What CI's `test` job actually runs. NOTE: plain `pytest -q` does NOT enforce the
-# fail_under=85 coverage gate — coverage only runs (and only fails) with --cov:
+# fail_under=100 coverage gate — coverage only runs (and only fails) with --cov:
 pytest -q --cov --cov-report=term-missing
 
 # Live API suite (real Google; opt-in). Needs a cached token or a first-run browser login:
@@ -372,7 +372,7 @@ around it quietly.
   *unverifiable* — `TODO.md` opens with the rotation notice and the permissions to grant.
   The script takes `--repo` / `--package` / `--environment` / `--branch`, so a sibling repo runs
   it rather than forking it.
-- **CI** (`.github/workflows/tests.yml`, runs on every PR): a `lint` job (ruff + mypy), a `test` matrix (pytest + coverage, Python 3.10–3.14, `fail_under=85`), and a `security` job (`pip-audit` + `bandit`). GitHub **CodeQL** default-setup also runs. Two gotchas seen: CodeQL flags `"host" in url`-style substring checks (`py/incomplete-url-substring-sanitization`) even in test assertions; and an OAuth **scope grant ≠ API enablement** — a scoped token still 403s `SERVICE_DISABLED` until each API (Docs/Sheets/Slides) is enabled in the Cloud project.
+- **CI** (`.github/workflows/tests.yml`, runs on every PR): a `lint` job (ruff + mypy), a `test` matrix (pytest + coverage, Python 3.10–3.14, `fail_under=100`, branch coverage on), and a `security` job (`pip-audit` + `bandit`). GitHub **CodeQL** default-setup also runs. Two gotchas seen: CodeQL flags `"host" in url`-style substring checks (`py/incomplete-url-substring-sanitization`) even in test assertions; and an OAuth **scope grant ≠ API enablement** — a scoped token still 403s `SERVICE_DISABLED` until each API (Docs/Sheets/Slides) is enabled in the Cloud project.
 - **New work follows the plan-then-execute rhythm:** write a spec/plan under `docs/superpowers/`, then implement TDD (unit tests via `FakeBackend`). Keep `README.md`'s manifest and `CHANGELOG.md` in sync. (Phase 1 — the library — and phase 2 — the MCP server — are both complete and on PyPI.)
 - **Style:** ruff (`E,F,W,I,B,UP`, line-length 120) and mypy both gate CI. `E702` is **deliberately ignored** — one-line `a = …; b = …` is a pervasive house style here, not a defect; match it rather than splitting lines. The google-api/auth stack ships no stubs, so those imports are `ignore_missing_imports`.
 - **Dependabot** opens `pip` + `github-actions` bumps and `dependabot-auto-merge.yml` auto-merges patch/minor once tests pass. Actions are **pinned to commit SHAs** — keep new ones pinned (`uses: owner/action@<sha>  # vX.Y.Z`).
