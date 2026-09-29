@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import io
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from csa_google_workspace import _cellmap
 from csa_google_workspace.comments import Author, Comment
@@ -101,7 +101,7 @@ def _comment(cid, content, dt):
 
 
 T = "2026-08-31T10:00:00"
-DT = datetime(2026, 8, 31, 10, 0, 0, tzinfo=timezone.utc)
+DT = datetime(2026, 8, 31, 10, 0, 0, tzinfo=UTC)
 
 
 class TestTheSheetNameIsRecovered:

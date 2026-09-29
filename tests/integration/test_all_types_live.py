@@ -80,7 +80,7 @@ def _free_folder_name(ws, _now=None):
     The search sees shared folders too. Skipping a name because somebody else's folder has it
     is the conservative direction and costs nothing but a suffix.
     """
-    now = _now or datetime.datetime.now(datetime.timezone.utc)
+    now = _now or datetime.datetime.now(datetime.UTC)
     base = f"csa-google-workspace-{now.strftime('%Y%m%d%H%M')}"
     name, n = base, 1
     while _folder_named(ws, name):

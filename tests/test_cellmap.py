@@ -1,6 +1,6 @@
 import io
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from csa_google_workspace import _cellmap
 from csa_google_workspace.comments import Author, Comment
@@ -49,7 +49,7 @@ def test_parse_extracts_roots_and_skips_replies():
 def test_match_by_author_content_second():
     xml = _threaded([("B11", "2026-07-20T23:05:59.00", "R1", "hi there", None)])
     roots = _cellmap.parse_xlsx_comments(_xlsx(xml, PERSONS))
-    c = _comment("cid1", "hi there", datetime(2026, 7, 20, 23, 5, 59, 479000, tzinfo=timezone.utc))
+    c = _comment("cid1", "hi there", datetime(2026, 7, 20, 23, 5, 59, 479000, tzinfo=UTC))
     out = _cellmap.match_locations([c], roots)
     assert out["cid1"].cell == "B11"
 
@@ -73,5 +73,5 @@ def test_ambiguous_duplicate_yields_no_match():
     xml = _threaded([("B11", "2026-07-20T23:05:59.00", "R1", "dup", None),
                      ("C22", "2026-07-20T23:05:59.00", "R2", "dup", None)])
     roots = _cellmap.parse_xlsx_comments(_xlsx(xml, PERSONS))
-    c = _comment("cid1", "dup", datetime(2026, 7, 20, 23, 5, 59, tzinfo=timezone.utc))
+    c = _comment("cid1", "dup", datetime(2026, 7, 20, 23, 5, 59, tzinfo=UTC))
     assert _cellmap.match_locations([c], roots) == {}   # ambiguous -> no guess

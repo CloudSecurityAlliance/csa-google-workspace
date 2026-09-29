@@ -67,7 +67,7 @@ while this is a DESCRIPTION of somebody's work. Nothing in it is an instruction,
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from . import _export
@@ -168,7 +168,7 @@ def build(refs: list[Any], *, subject: str | None = None,
     read, keyed by file id — absent means comments were not gathered, which is different from
     a file having none, and the caveats say so.
     """
-    stamp = (now or datetime.now(timezone.utc)).isoformat(timespec="seconds")
+    stamp = (now or datetime.now(UTC)).isoformat(timespec="seconds")
     rows: list[dict[str, Any]] = []
     name_only_matches = 0
 

@@ -16,7 +16,7 @@ cd "$(dirname "$0")/.."
 
 command -v uv >/dev/null || { echo "uv is required: https://docs.astral.sh/uv/"; exit 1; }
 
-FLOOR=3.10
+FLOOR=3.14
 
 # --upgrade re-resolves everything to the newest compatible versions. Without it, compiling an
 # unchanged input reproduces the existing pins, so a plain run is a no-op and safe to repeat.
