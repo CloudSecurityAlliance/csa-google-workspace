@@ -168,8 +168,8 @@ sheet.comments_by_cell("B11")                       # comments mapped back to a 
 **1. Install it.** Either of these puts the CLI in its own environment — use whichever you have:
 
 ```bash
-uv tool install "csa-google-workspace[mcp]"    # or:
-pipx install "csa-google-workspace[mcp]"
+uv tool install "csa-google-workspace[mcp]"    # recommended (DEC-012)
+pipx install "csa-google-workspace[mcp]"       # also works — the package is a standard wheel
 ```
 
 `pip install` works too, and is the right choice when you are embedding the **library** in your
@@ -767,7 +767,7 @@ follows, and two of those community servers are **larger than this one**.
 
 | | [Google's Drive MCP](https://developers.google.com/workspace/drive/api/reference/mcp) | Claude's built-in Drive connector | **csa-google-workspace** |
 |---|---|---|---|
-| **Setup** | none — hosted | none — built in | `pipx install`, your own OAuth client, `login` |
+| **Setup** | none — hosted | none — built in | `uv tool install`, your own OAuth client, `login` |
 | **Works with** | any MCP client | Claude | any MCP client (local stdio) |
 | **OAuth scope** | `drive.file` / `drive.readonly` | — | **full `drive`** |
 | **Runs on** | Google's servers | Anthropic's | your machine |
