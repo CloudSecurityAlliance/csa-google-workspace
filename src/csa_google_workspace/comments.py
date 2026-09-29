@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 
 from .exceptions import DetachedError, ReadOnlyError
@@ -340,8 +340,8 @@ class CommentCollection:
                since: datetime | None = None, include_deleted: bool = False) -> list[Comment]:
         smt = None
         if since is not None:
-            aware = since if since.tzinfo else since.replace(tzinfo=timezone.utc)
-            smt = aware.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            aware = since if since.tzinfo else since.replace(tzinfo=UTC)
+            smt = aware.astimezone(UTC).isoformat().replace("+00:00", "Z")
         raw = self._backend.list_comments(self._file_id, include_deleted=include_deleted,
                                           start_modified_time=smt)
         out = []

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from csa_google_workspace.comments import Comment, Reply, parse_time
 
@@ -15,7 +15,7 @@ DELETED = {"id": "c3", "deleted": True, "createdTime": "2026-07-20T23:05:00Z",
 
 
 def test_parse_time_handles_zulu():
-    assert parse_time("2026-07-20T23:05:59.479Z") == datetime(2026, 7, 20, 23, 5, 59, 479000, tzinfo=timezone.utc)
+    assert parse_time("2026-07-20T23:05:59.479Z") == datetime(2026, 7, 20, 23, 5, 59, 479000, tzinfo=UTC)
     assert parse_time(None) is None
 
 

@@ -23,7 +23,7 @@ import re
 
 from .test_all_types_live import _folder_named, _free_folder_name
 
-WHEN = datetime.datetime(2026, 9, 5, 21, 47, tzinfo=datetime.timezone.utc)
+WHEN = datetime.datetime(2026, 9, 5, 21, 47, tzinfo=datetime.UTC)
 
 
 class _Files:

@@ -8,7 +8,7 @@ worth converging on is the ecosystem's.
 from __future__ import annotations
 
 import time as _time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from mcp.server import MCPServer
 
@@ -43,7 +43,7 @@ def _parse_since(value: str | None):
         raise ValueError(
             f"since={value!r} is not a date. Use 2026-08-24 or a full timestamp like "
             f"2026-08-24T09:00:00Z.") from e
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 
 def register_comment_tools(app: MCPServer, get_workspace: WorkspaceProviderT,

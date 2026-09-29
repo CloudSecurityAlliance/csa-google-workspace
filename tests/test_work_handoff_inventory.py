@@ -23,7 +23,7 @@ sweep is built on.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -37,7 +37,7 @@ B = "1ZZ2CN6VqHDjxvl9kMKXvpv5CFDf6JOkJ9U7sHoBk9y9"
 SUBJECT = "away@example.org"
 AWAY = {"displayName": "Away Person", "emailAddress": SUBJECT}
 OTHER = {"displayName": "Someone Else", "emailAddress": "else@example.org"}
-NOW = datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 2, 12, 0, tzinfo=UTC)
 
 
 def raw(file_id, **extra):

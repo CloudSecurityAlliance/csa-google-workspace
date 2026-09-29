@@ -13,7 +13,7 @@ name = "csa-google-workspace"
 dynamic = ["version"]
 description = "Read/write content and manage comments on Google Docs, Sheets, and Slides"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Cloud Security Alliance" }]
@@ -34,10 +34,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Office/Business",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -109,6 +105,12 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 
 [tool.ruff]
+# Pinned, NOT inferred from requires-python. Inferred, ruff targets 3.14 and the
+# formatter emits PEP 758 unparenthesised `except A, B:` - valid on 3.14 and a
+# SyntaxError on 3.13 and below. That would make the floor a ONE-WAY DOOR: the
+# metadata is reversible, source that older Pythons cannot parse is not. Decoupling
+# the syntax we emit from the version we require keeps DEC-025 revisitable.
+target-version = "py312"
 line-length = 120
 extend-exclude = ["experiments", "research", "docs"]
 
@@ -124,7 +126,7 @@ ignore = ["E702"]
 "src/csa_google_workspace/mcp/_success_page.py" = ["E501"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.14"
 files = ["src"]
 warn_unused_ignores = true
 warn_redundant_casts = true

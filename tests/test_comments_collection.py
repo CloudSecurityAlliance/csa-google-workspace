@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -45,8 +45,8 @@ def test_filter_by_since():
     d = open_doc()
     d.create_comment("c")
     # FakeBackend comments carry a fixed ~2026 modifiedTime: a past `since` includes, a future one excludes
-    assert len(d.comments.filter(since=datetime(2020, 1, 1, tzinfo=timezone.utc))) == 1
-    assert d.comments.filter(since=datetime(2030, 1, 1, tzinfo=timezone.utc)) == []
+    assert len(d.comments.filter(since=datetime(2020, 1, 1, tzinfo=UTC))) == 1
+    assert d.comments.filter(since=datetime(2030, 1, 1, tzinfo=UTC)) == []
 
 
 def test_filter_by_author_display_name():

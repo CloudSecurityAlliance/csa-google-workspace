@@ -221,7 +221,7 @@ class Sheet(Document):
             parts.append(f"# {t}\n{body}" if len(tabs) > 1 else body)
         return "\n\n".join(parts)
 
-    def create_comment(self, content: str, cell: str | None = None) -> "Comment":
+    def create_comment(self, content: str, cell: str | None = None) -> Comment:
         self._require_writable()
         self._cell_map_cache = None
         if cell is None:
