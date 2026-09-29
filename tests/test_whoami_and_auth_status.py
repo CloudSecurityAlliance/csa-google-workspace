@@ -175,7 +175,12 @@ class TestAuthStatus:
         out = call(build(token_path=tilde), "auth_status")
 
         assert out["status"] == "ready"
-        assert out["token_path"] == str(home / ".csa_google_workspace" / "token.json"), \
+        # Compared as PATHS, not as strings. `expanduser` substitutes the `~` and leaves
+        # the rest of the configured string alone, so on Windows the result keeps the
+        # forward slashes it was configured with while `home / ...` produces backslashes -
+        # two spellings of one file. The claim is about WHICH FILE is read, and
+        # `WindowsPath` equality is what expresses that; on POSIX the two are identical.
+        assert pathlib.Path(out["token_path"]) == home / ".csa_google_workspace" / "token.json", \
             "the path reported is the file actually read, not the form it was configured in"
         assert auth.load_cached_credentials(tilde, read_only=False) is not None, \
             "the loader disagrees, so `ready` above proves nothing"

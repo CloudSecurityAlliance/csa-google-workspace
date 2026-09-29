@@ -1,27 +1,30 @@
-"""The Windows ACL hardening — the assertions, held until a Windows runner exists.
+"""The Windows ACL hardening — live as of the `windows-latest` job, no longer stubs.
 
 `auth.py`'s `_harden`, `_read_acl`, `_strays`, `_unexpected_principals`,
-`_current_windows_principal` and `_windows_owner_only` are gated on `os.name == "nt"` and CI is
-ubuntu-only, so none of them executes here. They carry `# pragma: no cover` naming this file.
+`_current_windows_principal` and `_windows_owner_only` are gated on `os.name == "nt"`, so they
+cannot execute on a POSIX runner. They still carry `# pragma: no cover` naming this file,
+because the ubuntu job is where the 100% coverage gate is enforced and those lines are
+unreachable there — the pragma is about ubuntu's measurement, not about these assertions.
 
-**These are NOT A TEST YET stubs**, in the sense `TESTING.md` defines: the exception is that they
-*cannot run here*, not that they should not exist. The bodies are written out so that whoever adds
-`windows-latest` to the matrix deletes a decorator rather than working out what to assert — which
-is the part that otherwise does not get done.
+**These were NOT A TEST YET stubs**, in the sense `TESTING.md` defines: the exception was that
+they *could not run here*, never that they should not exist. This module's own instruction was
+that whoever added `windows-latest` to the matrix should delete a decorator rather than work out
+what to assert. That is what happened — the blanket `skip` below became a `skipif` on the
+platform, and the bodies are unchanged.
 
-Why this matters more here than elsewhere: #452 found that T5's mitigation evidence was POSIX-only
-— `os.chmod` honours the read-only bit and nothing else on Windows, and `O_NOFOLLOW` is absent, so
-all three named mechanisms were no-ops. The `icacls` path below is the replacement, and it has
-never been executed by an automated test on the platform it exists for.
-
-Unblocked by: adding `windows-latest` to `.github/workflows/tests.yml` (#453). Deferred to 1.0.0
-deliberately — Windows runners cost, and the code is exercised locally in the meantime.
+Why this mattered more here than elsewhere: #452 found that T5's mitigation evidence was
+POSIX-only — `os.chmod` honours the read-only bit and nothing else on Windows, and `O_NOFOLLOW`
+is absent, so all three named mechanisms were no-ops. The `icacls` path below is the
+replacement, and until this ran it had never been executed by an automated test on the platform
+it exists for.
 """
+import os
+
 import pytest
 
-pytestmark = pytest.mark.skip(
-    reason="NOT A TEST YET: Windows-only; CI is ubuntu. Unblocked by adding windows-latest "
-           "to the matrix (#453), deferred to 1.0.0."
+pytestmark = pytest.mark.skipif(
+    os.name != "nt",
+    reason="Windows-only: these assert the icacls hardening, which has no POSIX counterpart",
 )
 
 
