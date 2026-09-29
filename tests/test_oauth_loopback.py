@@ -269,15 +269,22 @@ class TestFinishingTheExchange:
         """Through `_write_token`, not `open`. That is where owner-only permissions and the
         private parent directory live, and a second way of writing this file would be a second
         place for them to be forgotten."""
-        import os
-        import stat
+        from csa_google_workspace import auth
 
         token = tmp_path / "nested" / "token.json"
         _auth_flow.finish(self.FakeFlow(), "http://127.0.0.1/?code=c&state=s", str(token))
 
         assert token.exists()
-        mode = stat.S_IMODE(os.stat(token).st_mode)
-        assert mode & (stat.S_IRWXG | stat.S_IRWXO) == 0, f"group/other can read it: {mode:o}"
+        # Through `file_is_owner_only`, not `stat().st_mode & 0o077`. Its own docstring says
+        # why: "0o600 is the POSIX *answer* and hard-coding it is how the Windows gap
+        # survived" - `chmod` there sets only the read-only bit, so `os.stat` keeps reporting
+        # 0o666 however often you harden the file. This test was asserting the answer and so
+        # could only ever pass on one platform; asking the question gets the mode check on
+        # POSIX and the icacls ACL check on Windows, which is the property either way.
+        # `is True` deliberately: `None` means unknown, and unknown is not secure.
+        assert auth.file_is_owner_only(str(token)) is True, (
+            "the token is readable by someone other than its owner"
+        )
 
 
 class _FakeCredentials:
