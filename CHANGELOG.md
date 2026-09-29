@@ -10,6 +10,38 @@
 > keeps this file honest; `scripts/check_release_history.py` reconciles it against git tags and
 > PyPI itself.
 
+## 2026-09-28 — v0.55.0 (the server knows when it is out of date) — not released
+
+### Added
+- **`report_a_problem` now says whether the installed version is the latest, and how to
+  upgrade.** It reported the installed version and never asked whether that version was
+  current, so a bug could be filed in detail against something fixed three releases ago —
+  wasting the reporter's time first and the maintainer's second. `_environment.py` asks PyPI
+  (only when a caller requests it), and reports **how this copy was installed** so the
+  upgrade line is the right one rather than a guess between `pipx`, `uv tool` and `pip`.
+  "You are out of date" is half an answer; which command fixes it is the half that saves
+  anybody time. ([#486](https://github.com/CloudSecurityAlliance/csa-google-workspace/pull/486))
+
+### Notes
+- **100% coverage, statements and branches** — 5,499 statements, 1,368 branches, nothing
+  missing, with `fail_under` raised 85 → 100. A gate below the measured number cannot fail,
+  so the fifteen points between them were invisible regression rather than slack.
+  ([#493](https://github.com/CloudSecurityAlliance/csa-google-workspace/pull/493))
+- The climb changed **no shipped behaviour**: every `src/` edit in it is a `# pragma` with
+  its reason at the line, or a return-type annotation tightened to document a promise the
+  code already kept. Three of those pragmas mark genuinely unreachable branches and say what
+  would make them reachable again — `_context.py`'s `nearest_text` arm is one, and it is a
+  defect rather than a design, tracked as
+  [#492](https://github.com/CloudSecurityAlliance/csa-google-workspace/issues/492), because
+  removing a documented `context_kind` value a consumer reads is a contract change and not a
+  tidy-up.
+- The login paths that write a credential to disk — declined, timed out, authorized — had
+  never executed under test; the existing tests stopped at the elicitation. Four of the new
+  assertions cover failures that are invisible when they go wrong, including a loopback
+  listener left open on the raising path.
+  ([#489](https://github.com/CloudSecurityAlliance/csa-google-workspace/pull/489),
+  [#487](https://github.com/CloudSecurityAlliance/csa-google-workspace/pull/487))
+
 ## 2026-09-26 — v0.54.0 (who am I, and which project is this)
 
 Two tools and one fact. Until now this was the only CSA MCP server in daily use that could not
