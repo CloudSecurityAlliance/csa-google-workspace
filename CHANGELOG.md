@@ -10,6 +10,20 @@
 > keeps this file honest; `scripts/check_release_history.py` reconciles it against git tags and
 > PyPI itself.
 
+## 2026-09-29 — v0.55.1 (Python 3.14, and two dead guards a sibling found) — not released
+
+### Changed
+- **Requires Python 3.14 or later** (`requires-python = ">=3.14"`, was `>=3.10`).
+
+  **This is breaking for anyone installing on 3.10-3.13, despite the patch version
+  number.** It is a policy choice rather than a technical one - the code runs on
+  3.10 - recorded as [DEC-025][dec025] with its costs and the rejected alternative
+  written down. The version number is a patch because nothing about the tool
+  surface changed; the installability change is called out here instead of being
+  implied by a digit.
+
+[dec025]: https://github.com/CloudSecurityAlliance-Internal/CINO-Platform-Engineering/blob/main/DECISIONS.md
+
 ## 2026-09-28 — v0.55.0 (the server knows when it is out of date)
 
 ### Added
