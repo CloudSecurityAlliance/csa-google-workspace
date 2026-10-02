@@ -458,6 +458,18 @@ def _public_identity_fields(path: str) -> dict[str, str]:
     return {key: str(node[key]) for key in ("client_id", "project_id") if node.get(key)}
 
 
+# OAuth client projects this repo has MIGRATED AWAY FROM. A credential belonging to one of
+# these cannot be refreshed once Google deletes or unpublishes the project, and the failure
+# arrives as "could not refresh cached credentials" with nothing naming the cause (#510) - while
+# `auth_status`, which makes no network call by design, still reports `ready`.
+#
+# Hardcoded on purpose. The alternative is detecting it over the network, which is precisely the
+# call `auth_status` exists to avoid, and the set changes only when this repo migrates its client
+# - an event that already requires a release. #495 is the same migration seen from the other
+# side: "Project #548573610436 has been deleted".
+RETIRED_CLIENT_PROJECTS = frozenset({"cino-workspace-mcp"})
+
+
 def client_project_id(path: str | None) -> str | None:
     """The Google Cloud `project_id` a client-secrets file belongs to, or `None`.
 

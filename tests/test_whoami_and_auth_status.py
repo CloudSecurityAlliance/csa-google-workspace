@@ -152,6 +152,49 @@ class TestAuthStatus:
         assert absent["client_project"] == "csa-drive-docs-mcp"
         assert ready["client_project"] == "csa-drive-docs-mcp"
 
+    def test_a_retired_client_project_is_its_own_state_not_ready(self, tmp_path):
+        """#510: `auth_status` said ready while every call failed to refresh.
+
+        Measured by contrast on one Windows box, same version and platform: an install on
+        `csa-drive-docs-mcp` refreshed and answered `whoami`, while the reporting install was
+        on `cino-workspace-mcp` and every call failed. `client_project_id`'s own docstring
+        already named the mechanism - "a token issued by the old project keeps refreshing
+        against it until that project is deleted".
+
+        This function makes no network call and so cannot see the revocation. It does not need
+        to: it already reads the project id, and this repo knows which project it retired.
+        """
+        client = write_client(tmp_path / "c.json", project_id="cino-workspace-mcp")
+        out = call(build(token_path=write_token(tmp_path / "t.json"), client_secrets=client),
+                   "auth_status")
+        assert out["status"] == "client_retired"
+        assert out["client_project"] == "cino-workspace-mcp"
+        # The one sentence that fixes it, rather than the one that loops.
+        assert "setup script" in out["detail"]
+        assert "logging in again will not fix it" in out["detail"]
+
+    def test_a_retired_client_is_reported_even_with_a_perfectly_good_token(self, tmp_path):
+        """The condition #510 was reported under: a login that had just succeeded, a token
+        carrying every scope, and `ready` - while nothing worked. A good token is not evidence
+        that the client behind it still exists."""
+        client = write_client(tmp_path / "c.json", project_id="cino-workspace-mcp")
+        good = write_token(tmp_path / "t.json")
+        assert call(build(token_path=good, client_secrets=client),
+                    "auth_status")["status"] == "client_retired"
+        # Same token, current client: the token is fine, so this must still be `ready`.
+        current = write_client(tmp_path / "ok.json")
+        assert call(build(token_path=good, client_secrets=current),
+                    "auth_status")["status"] == "ready"
+
+    def test_a_retired_client_outranks_no_credential(self, tmp_path):
+        """Order matters. `authenticate` against a retired client fails the same way, so
+        reporting "no credential, log in again" would send somebody round the loop that just
+        failed. The client has to be replaced first, and that is what the message says."""
+        client = write_client(tmp_path / "c.json", project_id="cino-workspace-mcp")
+        out = call(build(token_path=str(tmp_path / "absent.json"), client_secrets=client),
+                   "auth_status")
+        assert out["status"] == "client_retired"
+
     def test_a_tilde_path_is_expanded_the_way_the_loader_expands_it(self, monkeypatch):
         """#490, and it hit the DEFAULT configuration.
 
