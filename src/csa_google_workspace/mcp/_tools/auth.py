@@ -56,6 +56,24 @@ def _auth_status_payload(token_path: str, read_only: bool,
     """
     path = os.path.expanduser(token_path_for(token_path, read_only))
     project = _auth.client_project_id(client_secrets)
+    # FIRST, because a retired client invalidates everything below it. A credential belonging to
+    # a project this repo has migrated away from stops refreshing once Google deletes or
+    # unpublishes that project, and the failure arrives as "could not refresh cached
+    # credentials" while this function - which makes no network call by design - reports
+    # `ready` (#510). Measured by contrast: an install on csa-drive-docs-mcp refreshes and
+    # answers `whoami`; the reporting install was on cino-workspace-mcp and every call failed.
+    #
+    # Reported ahead of the token checks because `authenticate` against a retired client fails
+    # the same way, so "no credential, log in again" would send somebody round the loop that
+    # just failed. The client has to be replaced first.
+    if project in _auth.RETIRED_CLIENT_PROJECTS:
+        return {"status": "client_retired", "token_path": path, "client_project": project,
+                "detail": f"The client secrets in use belong to {project}, an OAuth client this "
+                          f"project has migrated away from. Credentials issued by it stop "
+                          f"refreshing once Google retires the project, which surfaces as "
+                          f"'could not refresh cached credentials' on every call - logging in "
+                          f"again will not fix it. Re-run the CSA setup script to fetch the "
+                          f"current client secrets, then call `authenticate`."}
     if not os.path.exists(path):
         return {"status": "no_credential", "token_path": path, "client_project": project,
                 "detail": f"No credential cached at {path}. Call `authenticate` to log in."}
