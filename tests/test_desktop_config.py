@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import json
 import os
+import stat
+import sys
 
 import pytest
 
@@ -32,6 +34,25 @@ from csa_google_workspace.mcp import _desktop
 @pytest.fixture
 def config(tmp_path):
     return tmp_path / "claude_desktop_config.json"
+
+
+
+def _console_script(directory):
+    """Create the console script the way the platform actually ships it.
+
+    The fixtures used to write `SCRIPT_NAME` with no suffix, so `Path.exists()` found exactly
+    that name on Windows and the test passed while the real install — which carries `.exe` —
+    failed. Same blind spot as csa-zendesk#80: the code and the fixture shared one wrong
+    assumption, so the suite confirmed the bug instead of catching it.
+
+    The exec bit matters on POSIX because `shutil.which` requires it, unlike `exists()`.
+    """
+    name = _desktop.SCRIPT_NAME + (".exe" if sys.platform == "win32" else "")
+    path = directory / name
+    path.write_text("#!/usr/bin/env python3\n")
+    if sys.platform != "win32":
+        path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return path
 
 
 class TestTheCommandItWrites:
@@ -190,14 +211,30 @@ class TestResolvingTheLaunchCommand:
         needs no interpreter and no PATH - which is the entire problem being solved."""
         fake_bin = tmp_path / "bin"
         fake_bin.mkdir()
-        (fake_bin / _desktop.SCRIPT_NAME).write_text("#!/usr/bin/env python3\n")
+        script = _console_script(fake_bin)
         monkeypatch.setattr(_desktop.sys, "executable", str(fake_bin / "python"))
-        monkeypatch.setattr(_desktop.shutil, "which",
-                            lambda n: pytest.fail("PATH was consulted before the local script"))
+
+        # The guard is kept and sharpened. It used to fail on ANY which() call, which stopped
+        # being right when branch 1 started using which() itself (#511) - the thing worth
+        # forbidding is consulting the AMBIENT PATH before the local script, so that is what
+        # is asserted: the first call must name a directory.
+        real_which = _desktop.shutil.which
+        calls = []
+
+        def spy(name, path=None):
+            calls.append(path)
+            if path is None:
+                pytest.fail("the ambient PATH was consulted before the local script")
+            return real_which(name, path=path)
+
+        monkeypatch.setattr(_desktop.shutil, "which", spy)
 
         command, how = _desktop.launch_command()
-        assert command == [str(fake_bin / _desktop.SCRIPT_NAME)]
+        assert command == [str(script.resolve())]
         assert "beside this interpreter" in how
+        assert calls == [str(fake_bin)], calls
+        if sys.platform == "win32":
+            assert command[0].lower().endswith(".exe")
 
     def test_a_script_on_path_is_resolved_to_an_absolute_path(self, tmp_path, monkeypatch):
         """Correct, and one step less certain - it may not be the install this process came
@@ -205,10 +242,12 @@ class TestResolvingTheLaunchCommand:
         exactly what fails under launchd's PATH."""
         elsewhere = tmp_path / "usr" / "local" / "bin"
         elsewhere.mkdir(parents=True)
-        script = elsewhere / _desktop.SCRIPT_NAME
-        script.write_text("#!/usr/bin/env python3\n")
+        script = _console_script(elsewhere)
         monkeypatch.setattr(_desktop.sys, "executable", str(tmp_path / "nowhere" / "python"))
-        monkeypatch.setattr(_desktop.shutil, "which", lambda n: str(script))
+        # `path=None` is branch 2 (the ambient PATH); a named path is branch 1, which finds
+        # nothing here because sys.executable points at an empty directory.
+        monkeypatch.setattr(_desktop.shutil, "which",
+                            lambda n, path=None: None if path else str(script))
 
         command, how = _desktop.launch_command()
         assert command == [str(script.resolve())]
@@ -220,7 +259,7 @@ class TestResolvingTheLaunchCommand:
         absolute by construction - which is what makes it a real fallback rather than a
         guess."""
         monkeypatch.setattr(_desktop.sys, "executable", str(tmp_path / "nowhere" / "python"))
-        monkeypatch.setattr(_desktop.shutil, "which", lambda n: None)
+        monkeypatch.setattr(_desktop.shutil, "which", lambda n, path=None: None)
 
         command, how = _desktop.launch_command()
         assert command == [str(tmp_path / "nowhere" / "python"), "-m", "csa_google_workspace.mcp"]
@@ -231,7 +270,7 @@ class TestResolvingTheLaunchCommand:
         "python -m csa_google_workspace.mcp" in `command` makes it look for an executable with
         spaces in its name."""
         monkeypatch.setattr(_desktop.sys, "executable", str(tmp_path / "nowhere" / "python"))
-        monkeypatch.setattr(_desktop.shutil, "which", lambda n: None)
+        monkeypatch.setattr(_desktop.shutil, "which", lambda n, path=None: None)
 
         written = _desktop.entry({})
         assert written["command"] == str(tmp_path / "nowhere" / "python")
@@ -242,7 +281,7 @@ class TestResolvingTheLaunchCommand:
         diffed against itself to decide whether anything changed."""
         fake_bin = tmp_path / "bin"
         fake_bin.mkdir()
-        (fake_bin / _desktop.SCRIPT_NAME).write_text("")
+        _console_script(fake_bin)
         monkeypatch.setattr(_desktop.sys, "executable", str(fake_bin / "python"))
 
         assert "args" not in _desktop.entry({})
