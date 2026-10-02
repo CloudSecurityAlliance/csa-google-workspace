@@ -84,9 +84,23 @@ def launch_command() -> tuple[list[str], str]:
        the interpreter — `sys.executable` is absolute by construction — which is what makes it
        a real fallback rather than a guess.
     """
-    beside = Path(sys.executable).parent / SCRIPT_NAME
-    if beside.exists():
-        return [str(beside)], "the console script beside this interpreter"
+    # `which(..., path=<one directory>)`, not `/ SCRIPT_NAME` and `.exists()`. On Windows the
+    # console script is `csa-google-workspace-mcp.exe`, so the suffix-less path never exists and
+    # this branch — the most self-contained of the three — was dead on that platform, sending
+    # every Windows run to branch 2 (#511).
+    #
+    # That was not merely a dead branch. Measured from a repo venv: branch 2's ambient-PATH
+    # lookup returned the *uv tool* install, so the command written into Claude Desktop named a
+    # different install from the one this process came from — precisely what branch 1 exists to
+    # prevent and what the docstring warns branch 2 may do.
+    #
+    # which() rather than appending ".exe": it honours PATHEXT, so a `.cmd` or `.bat` shim
+    # resolves too. Passing `path=` keeps the ambient PATH out of this branch, which is the
+    # distinction between sources 1 and 2.
+    beside = shutil.which(SCRIPT_NAME, path=str(Path(sys.executable).parent))
+    if beside:
+        # .resolve() because which() returns PATHEXT's casing (`.EXE`) rather than the file's.
+        return [str(Path(beside).resolve())], "the console script beside this interpreter"
     found = shutil.which(SCRIPT_NAME)
     if found:
         return [str(Path(found).resolve())], f"{SCRIPT_NAME} on PATH"
