@@ -367,6 +367,19 @@ class TestAuthStatusVerifiesAgainstGoogle:
         assert "did not answer within" in out["detail"]
         assert took < 5, f"the bound did not hold: {took:.1f}s"
 
+    def test_it_cannot_claim_ready_without_a_verifier(self, tmp_path):
+        """THE INVARIANT OF THIS WHOLE CHANGE, asserted at the seam rather than through a tool.
+
+        `_auth_status_payload` has one caller today and it always passes a verifier. This test
+        exists so that a second caller which forgets to cannot resurrect the #510 bug: with no
+        verifier the answer is `cached`, never `ready`, because nothing was checked.
+        """
+        from csa_google_workspace.mcp._tools.auth import _auth_status_payload
+
+        out = _auth_status_payload(write_token(tmp_path / "t.json"), False, None, verify=None)
+        assert out["status"] == "cached", out
+        assert "NOT checked" in out["detail"]
+
     def test_the_local_states_still_answer_without_any_network(self, tmp_path):
         """Verification is only reached once the file is readable and complete. A missing
         credential must not wait on a timeout to say so."""
