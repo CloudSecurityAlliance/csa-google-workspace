@@ -1278,6 +1278,10 @@ This library is a building block for MCP servers / agents / automations acting *
 | [`CHANGELOG.md`](./CHANGELOG.md) | What changed in each refresh, and why. Headings say which versions were actually published. |
 | [`PROVENANCE.md`](./PROVENANCE.md) | Who built this and how, how to verify a release's attestation yourself, the yank policy, and what the secret scanners say about the history. |
 | [`docs/DECISIONS.md`](./docs/DECISIONS.md) | An index of decisions — when each was settled, what evidence settled it, and which earlier belief it replaced. |
+| [`BACKUP-RESOURCES.md`](./BACKUP-RESOURCES.md) | Everything persistent here is a **credential**, so the right retention is zero copies. Includes the measured case where a pre-#451 backup still reports `owner_only=False` beside current files reporting `True`. |
+| [`RACI.md`](./RACI.md) | Who is accountable, what the concentration costs, and the three mechanisms that defend against it. |
+| [`WAITING-FOR.md`](./WAITING-FOR.md) | Blockers with someone else's name on them — three of them Google's. |
+| [`FRICTION.md`](./FRICTION.md) | What cost time, so it costs it once — six entries, each naming its issue. |
 
 ## Why comment retrieval is trickier than it looks
 
