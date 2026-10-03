@@ -2,7 +2,7 @@
 
 Together they answer the three questions a person actually asks of a server that holds a Google
 credential, and they are deliberately three tools rather than one: *can I get in* (`authenticate`),
-*am I in, and completely* (`auth_status`, no network call), and *as whom* (`whoami`, one narrow
+*am I in, and does it still work* (`auth_status`, one bounded check), and *as whom* (`whoami`, one narrow
 Drive read). Before #481 this server answered only the first, and identity had to be INFERRED by
 calling `list_recent_files` and looking for `"me": true` in `owners` - which costs a real Drive
 call, and still cannot tell "not logged in" apart from "logged in but revoked".
@@ -10,6 +10,7 @@ call, and still cannot tell "not logged in" apart from "logged in but revoked".
 from __future__ import annotations
 
 import os
+import threading
 import uuid
 from typing import TYPE_CHECKING
 
@@ -31,8 +32,65 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..server import WorkspaceProviderT
 
 
+# Seconds to wait for Google before giving up and reporting `cached`. Short on purpose:
+# `auth_status` is the tool somebody calls WHEN THINGS ARE ALREADY FAILING, so it must answer
+# quickly even when the network is the thing that is broken.
+_VERIFY_TIMEOUT = 5.0
+
+
+def _verify_live(verify, timeout: float | None = None) -> tuple[str, str]:
+    """Ask Google whether the cached credential actually works.
+
+    Returns `(outcome, detail)` where outcome is:
+
+      `ok`         - Google answered; detail is the account email, or "" if Drive named none.
+      `rejected`   - Google refused the credential; detail is why.
+      `unverified` - the question could not be asked; detail says what stopped it.
+
+    Bounded on a THREAD rather than with `signal.alarm`, which is POSIX-only - most of this
+    server's users run Windows. A thread that outlives the timeout is left running as a daemon:
+    the call is a read-only `about.get`, so the cost of abandoning it is one wasted request, and
+    there is no portable way to kill it. Saying so beats pretending otherwise.
+
+    UNCERTAINTY DEGRADES TO `unverified`, never to `rejected`. Only our own typed auth and
+    access errors mean "Google refused"; a socket error, a 500 or an SSL failure must not be
+    reported as a dead credential, because telling somebody to log in again when their network
+    is down is the same kind of wrong answer this verification exists to remove.
+    """
+    # Read at CALL time, not as a default argument. `timeout=_VERIFY_TIMEOUT` in the signature
+    # binds the value once when the module is imported, so the module attribute stops being the
+    # knob it looks like - patching it has no effect and the bound cannot be tuned without
+    # editing the signature. Found by a test that asserted ELAPSED TIME rather than just the
+    # status: the status was already correct, so a status-only assertion would have passed with
+    # a five-second wait hidden inside it.
+    timeout = _VERIFY_TIMEOUT if timeout is None else timeout
+    box: dict[str, object] = {}
+
+    def run() -> None:
+        try:
+            box["ok"] = verify()
+        except BaseException as e:  # noqa: BLE001 - classifying the failure IS the job here
+            box["err"] = e
+
+    worker = threading.Thread(target=run, daemon=True, name="auth_status-verify")
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        return "unverified", (f"Google did not answer within {timeout:g}s, so the credential "
+                              f"has not been checked upstream.")
+    if "err" in box:
+        e = box["err"]
+        if isinstance(e, (exc.AuthError, exc.AccessError)):
+            return "rejected", str(e)
+        return "unverified", f"{type(e).__name__}: {e}"
+    who = box.get("ok") or {}
+    email = (who.get("email_address") if isinstance(who, dict) else None) or ""
+    return "ok", email
+
+
 def _auth_status_payload(token_path: str, read_only: bool,
-                         client_secrets: str | None) -> AuthStatusOut:
+                         client_secrets: str | None,
+                         verify=None) -> AuthStatusOut:
     """No network call, ever - that is the whole point of this existing separately from
     `auth.load_cached_credentials`, which refreshes an expired access token over the wire as
     part of returning usable credentials.
@@ -59,8 +117,12 @@ def _auth_status_payload(token_path: str, read_only: bool,
     # FIRST, because a retired client invalidates everything below it. A credential belonging to
     # a project this repo has migrated away from stops refreshing once Google deletes or
     # unpublishes that project, and the failure arrives as "could not refresh cached
-    # credentials" while this function - which makes no network call by design - reports
-    # `ready` (#510). Measured by contrast: an install on csa-drive-docs-mcp refreshes and
+    # credentials" while this function - which then made no network call at all - reported
+    # `ready` (#510). That gap is closed below: `ready` is now verified rather than predicted.
+    # This branch stays because it is still the better answer for a KNOWN-retired project - it
+    # names the cause and the remedy without waiting on a call that will fail.
+    #
+    # Measured by contrast: an install on csa-drive-docs-mcp refreshes and
     # answers `whoami`; the reporting install was on cino-workspace-mcp and every call failed.
     #
     # Reported ahead of the token checks because `authenticate` against a retired client fails
@@ -97,8 +159,31 @@ def _auth_status_payload(token_path: str, read_only: bool,
         return {"status": "no_credential", "token_path": path, "client_project": project,
                 "detail": f"The credential cached at {path} is not usable. "
                           f"Call `authenticate` to log in again."}
+    # Everything above is a LOCAL verdict and the states are honest about it. This last one
+    # was not: `ready` is a claim that calls will work, and a file read cannot support it.
+    # #510 is the bill for that - a token whose OAuth project had been deleted read as `ready`
+    # while every call failed. `client_retired` catches that for a hardcoded set of projects
+    # and cannot catch a token revoked at myaccount.google.com, scopes revoked at the IdP, a
+    # suspended account, or a policy change. So ask.
+    if verify is None:
+        return {"status": "cached", "token_path": path, "client_project": project,
+                "detail": f"Credential cached at {path} with every required scope. NOT checked "
+                          f"against Google - no verifier was available, so this says the file "
+                          f"is well formed and nothing more."}
+    outcome, why = _verify_live(verify)
+    if outcome == "rejected":
+        return {"status": "credential_rejected", "token_path": path, "client_project": project,
+                "detail": f"Google refused the credential cached at {path}: {why} Logging in "
+                          f"again is the usual fix; if it fails the same way, the OAuth client "
+                          f"itself is the problem rather than the token."}
+    if outcome == "unverified":
+        return {"status": "cached", "token_path": path, "client_project": project,
+                "detail": f"Credential cached at {path} with every required scope, but it could "
+                          f"not be checked against Google: {why} The file is well formed; "
+                          f"whether Google still accepts it is unknown."}
     return {"status": "ready", "token_path": path, "client_project": project,
-            "detail": f"Credential cached at {path} with every required scope."}
+            "detail": (f"Verified against Google{f' as {why}' if why else ''}. "
+                       f"Credential cached at {path} with every required scope.")}
 
 
 def register_auth_tools(app: MCPServer, settings: Settings,
@@ -194,7 +279,7 @@ def register_auth_tools(app: MCPServer, settings: Settings,
     @app.tool(annotations=READ)
     def auth_status() -> AuthStatusOut:
         """Whether a credential is cached, whether it covers every scope this deployment needs,
-        and - if so - whether it looks usable right now. Makes no network call and never returns
+        and - if so - whether Google still accepts it. Makes ONE bounded call and never returns
         the credential itself.
 
         Call this BEFORE `authenticate` rather than guessing from a failed tool call. Three
@@ -209,7 +294,8 @@ def register_auth_tools(app: MCPServer, settings: Settings,
         and it is how a person tells which side of the `cino-workspace-mcp` -> `csa-drive-docs-mcp`
         migration a token is on."""
         return _auth_status_payload(settings.token_path, settings.read_only,
-                                    settings.client_secrets)
+                                    settings.client_secrets,
+                                    verify=lambda: get_workspace().whoami())
 
     @app.tool(annotations=READ)
     def whoami() -> WhoamiOut:
@@ -219,7 +305,8 @@ def register_auth_tools(app: MCPServer, settings: Settings,
         One narrow `about.get`; it reads no files. Before this existed the only way to establish
         identity was to call `list_recent_files` and infer it from `"me": true` in `owners`,
         which costs a real Drive call and cannot distinguish "not logged in" from "logged in but
-        revoked" - use `auth_status` for that question, which makes no call at all.
+        revoked" - use `auth_status` for that question, which distinguishes all five states
+        and verifies against Google rather than predicting.
 
         Worth checking before a write. This server can hold read AND modify scope over every
         file the credential can reach, including sharing and trashing, so a token belonging to
