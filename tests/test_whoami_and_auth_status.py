@@ -276,6 +276,113 @@ class TestWhoami:
         assert by_name["auth_status"].annotations.read_only_hint is True
 
 
+class TestAuthStatusVerifiesAgainstGoogle:
+    """`ready` used to be a liveness claim made from a file read (#510, #516 discussion).
+
+    The schema's prose was already honest - "usable as far as can be told without a network
+    call" - but the word on the wire was not, and the function's own comment said every caller
+    reads `ready` as "go ahead and write". A token whose OAuth project had been deleted read as
+    `ready` while every call failed; `client_retired` catches that for a HARDCODED set of
+    projects and cannot catch a revoked token, revoked scopes, a suspended account or a policy
+    change.
+    """
+
+    def _raising(self, err):
+        """A backend whose `about.get` fails, which is the call the verification makes."""
+        class Boom(FakeBackend):
+            def get_about_user(self):
+                raise err
+        return Boom(FILES)
+
+    def test_ready_is_now_earned_and_names_the_account(self, tmp_path):
+        """The account is reported because that is what the check LEARNED, and it is worth
+        seeing before a write that could reach every file the credential can touch."""
+        backend = FakeBackend(FILES, about_user={"emailAddress": "someone@example.org",
+                                                 "displayName": "Someone"})
+        server = build(backend=backend, token_path=write_token(tmp_path / "t.json"))
+        out = call(server, "auth_status")
+        assert out["status"] == "ready"
+        assert "someone@example.org" in out["detail"]
+        assert "Verified against Google" in out["detail"]
+
+    def test_google_refusing_the_credential_is_its_own_state(self, tmp_path):
+        """Not `ready`, and not `no_credential` either - the file is there and well formed.
+        `no_credential` would send somebody to a first login for a token that exists."""
+        from csa_google_workspace.exceptions import AuthError
+        server = build(backend=self._raising(AuthError("invalid_grant: token has been revoked")),
+                       token_path=write_token(tmp_path / "t.json"))
+        out = call(server, "auth_status")
+        assert out["status"] == "credential_rejected"
+        assert "token has been revoked" in out["detail"], out["detail"]
+
+    def test_an_access_error_is_also_a_refusal(self, tmp_path):
+        from csa_google_workspace.exceptions import AccessError
+        server = build(backend=self._raising(AccessError("caller lacks permission")),
+                       token_path=write_token(tmp_path / "t.json"))
+        assert call(server, "auth_status")["status"] == "credential_rejected"
+
+    def test_an_unknown_failure_degrades_to_cached_not_to_rejected(self, tmp_path):
+        """THE RULE THIS CLASS EXISTS FOR. A socket error, a 500 or an SSL failure says nothing
+        about the credential. Reporting `credential_rejected` would tell somebody to log in
+        again because their wifi is down - the same shape of wrong answer as the old `ready`,
+        in the other direction."""
+        server = build(backend=self._raising(OSError("[Errno 11001] getaddrinfo failed")),
+                       token_path=write_token(tmp_path / "t.json"))
+        out = call(server, "auth_status")
+        assert out["status"] == "cached", out
+        assert "could not be checked against Google" in out["detail"]
+        assert "getaddrinfo failed" in out["detail"], "the cause has to survive to the caller"
+
+    def test_cached_says_plainly_that_nothing_was_verified(self, tmp_path):
+        """The whole point of the rename: `cached` must not be mistakable for `ready`."""
+        server = build(backend=self._raising(OSError("down")),
+                       token_path=write_token(tmp_path / "t.json"))
+        detail = call(server, "auth_status")["detail"]
+        assert "well formed" in detail
+        assert "unknown" in detail.lower()
+
+    def test_a_hanging_google_times_out_rather_than_hanging_the_tool(self, tmp_path):
+        """`auth_status` is what somebody calls when things are ALREADY failing, so it has to
+        answer when the network is the thing that is broken. Bounded on a thread, because
+        `signal.alarm` is POSIX-only and most of this server's users are on Windows."""
+        import time
+
+        from csa_google_workspace.mcp._tools import auth as auth_tools
+
+        class Hang(FakeBackend):
+            def get_about_user(self):
+                time.sleep(30)
+                raise AssertionError("should have been abandoned")
+
+        original = auth_tools._VERIFY_TIMEOUT
+        auth_tools._VERIFY_TIMEOUT = 0.05
+        try:
+            server = build(backend=Hang(FILES), token_path=write_token(tmp_path / "t.json"))
+            started = time.monotonic()
+            out = call(server, "auth_status")
+            took = time.monotonic() - started
+        finally:
+            auth_tools._VERIFY_TIMEOUT = original
+        assert out["status"] == "cached", out
+        assert "did not answer within" in out["detail"]
+        assert took < 5, f"the bound did not hold: {took:.1f}s"
+
+    def test_the_local_states_still_answer_without_any_network(self, tmp_path):
+        """Verification is only reached once the file is readable and complete. A missing
+        credential must not wait on a timeout to say so."""
+        import time
+
+        class Hang(FakeBackend):
+            def get_about_user(self):
+                time.sleep(30)
+
+        server = build(backend=Hang(FILES), token_path=str(tmp_path / "absent.json"))
+        started = time.monotonic()
+        out = call(server, "auth_status")
+        assert out["status"] == "no_credential"
+        assert time.monotonic() - started < 1, "a local verdict waited on the network"
+
+
 class TestTheLibraryAnswersWithoutTheServer:
     def test_workspace_whoami_needs_no_mcp_layer(self):
         """The seam rule: the library is callable without the server. `whoami` is a library

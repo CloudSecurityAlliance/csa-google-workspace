@@ -461,7 +461,9 @@ def _public_identity_fields(path: str) -> dict[str, str]:
 # OAuth client projects this repo has MIGRATED AWAY FROM. A credential belonging to one of
 # these cannot be refreshed once Google deletes or unpublishes the project, and the failure
 # arrives as "could not refresh cached credentials" with nothing naming the cause (#510) - while
-# `auth_status`, which makes no network call by design, still reports `ready`.
+# `auth_status`, which then made no network call at all, still reported `ready`. That is now
+# verified rather than predicted, but this set stays: a known-retired project is worth naming
+# before a call that is certain to fail.
 #
 # Hardcoded on purpose. The alternative is detecting it over the network, which is precisely the
 # call `auth_status` exists to avoid, and the set changes only when this repo migrates its client

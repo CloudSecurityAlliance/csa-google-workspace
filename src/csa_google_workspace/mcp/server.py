@@ -41,7 +41,8 @@ IF A TOOL REPORTS THAT THE SERVER IS NOT AUTHORIZED: call the `authenticate` too
 sends the user a Google sign-in link in this conversation. If that is unavailable, relay the
 `... login` command from the error verbatim and wait for the user. Do not search the
 filesystem for credential files and do not retry other tools until authorization completes.
-Call `auth_status` first when you want to know WHY: it makes no network call and separates
+Call `auth_status` first when you want to know WHY: it asks Google whether the credential
+actually works, and separates
 "never logged in" from "logged in, but a scope is missing" - the second needs a re-consent,
 not a first login, and telling a user they are logged out when they are not wastes their time.
 

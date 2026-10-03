@@ -601,7 +601,7 @@ class WhoamiOut(TypedDict):
 
 
 class AuthStatusOut(TypedDict):
-    """Three states, not two, and the middle one is the reason this is not a boolean.
+    """Five states, and the reason this is not a boolean is that three of them are not "no".
 
     `no_credential` - nothing usable is cached; this is a first login.
     `scope_short`   - a credential IS cached and IS valid, it just predates a scope this
@@ -609,7 +609,17 @@ class AuthStatusOut(TypedDict):
                       first login, and collapsing this into `no_credential` would say "you are
                       not logged in" about a credential sitting right there and working fine
                       for everything it was issued for.
-    `ready`         - cached, complete, and usable as far as can be told without a network call.
+    `ready`         - cached, complete, AND verified against Google. The detail names the
+                      account, because that is what the check learned and it is worth seeing
+                      before a write.
+    `cached`        - cached and complete, and Google could NOT be asked - a timeout, a socket
+                      error, a 500. The file is well formed; whether it still works is unknown,
+                      and the detail says which. This is the state `ready` used to occupy while
+                      claiming more than it knew (#510).
+    `credential_rejected`
+                    - Google refused it, carrying Google's own message. Distinct from
+                      `no_credential` because the file IS there and IS well formed, so "log in,
+                      you have no credential" would be a false description of the machine.
 
     `client_project` rides on every state: which Google Cloud project the configured OAuth
     client belongs to, or `None` if none is configured or it could not be read. See
