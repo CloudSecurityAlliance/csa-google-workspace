@@ -58,7 +58,7 @@ most in the CSA MCP fleet.
 ## Gaps
 
 - **Nothing watches Google's API surface for drift** —
-  [CINO-PE #49](https://github.com/CloudSecurityAlliance-Internal/CINO-Platform-Engineering/issues/49).
+  [CINO-PE #49](https://github.com/CloudSecurityAlliance-Internal/CINO-Engineering/issues/49).
   The Docs API gained comments and suggestion accept/reject in Developer Preview, obsoleting two of
   this project's own "API-impossible" claims, and **a human noticed**. GA is expected 2027-01.
 - **No Windows or macOS CI**, per the limit above.

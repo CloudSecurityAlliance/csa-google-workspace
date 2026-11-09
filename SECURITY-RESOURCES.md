@@ -59,7 +59,7 @@ Two rules follow from content being attacker-controlled, and the second is count
 | Gap | Status | Owner |
 |---|---|---|
 | **CI is ubuntu-only; 27 Windows test failures.** Three named security mitigations were POSIX-only no-ops (#452), and the threat model said otherwise. A green badge means green on one platform | Open — #453, actively worked | Kurt Seifried |
-| **Nothing watches Google's API surface.** The Docs API gained comments and suggestion accept/reject, obsoleting two "API-impossible" claims — caught by a human (#364) | Open — [CINO-PE #49](https://github.com/CloudSecurityAlliance-Internal/CINO-Platform-Engineering/issues/49) | Kurt Seifried |
+| **Nothing watches Google's API surface.** The Docs API gained comments and suggestion accept/reject, obsoleting two "API-impossible" claims — caught by a human (#364) | Open — [CINO-PE #49](https://github.com/CloudSecurityAlliance-Internal/CINO-Engineering/issues/49) | Kurt Seifried |
 | **Security controls have no single readable place and no guided setup** (#286) | Open | Kurt Seifried |
 | **Prompt-injection hardening is researched, not decided** (#297) | Open | Kurt Seifried |
 | **Guards decay.** Three from a prior remediation were found asserting nothing; a drift detector always exited 0 | Mitigated — each guard now needs a test proven to fire | Kurt Seifried |

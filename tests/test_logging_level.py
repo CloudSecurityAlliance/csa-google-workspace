@@ -9,7 +9,7 @@ the same independently in a different format. Two clients, not coordinating.
 Their version is also better than one written here — it is the *parent* capturing the *child*, so
 it survives the server failing to start, crashing, or hanging, which is when a log is most wanted
 and when a self-written file is missing. So the whole feature collapsed to **a level, and what to
-say.** Full write-up: `CINO-Platform-Engineering/research/mcp-servers/
+say.** Full write-up: `CINO-Engineering/research/mcp-servers/
 LOGGING-BELONGS-TO-THE-CLIENT.md`.
 
 Three properties are worth holding, and they are the three that would be expensive to get wrong:

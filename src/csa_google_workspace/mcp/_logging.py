@@ -17,7 +17,7 @@ exactly then.
 
 So `#145` shrank from "build logging" to "emit more, at a level somebody can turn up". No log
 directory, no rotation, no retention, no session ids, no file permissions. All of it is the
-client's. Full write-up: `CINO-Platform-Engineering/research/mcp-servers/
+client's. Full write-up: `CINO-Engineering/research/mcp-servers/
 LOGGING-BELONGS-TO-THE-CLIENT.md`.
 
 ## Two rules this module exists to hold

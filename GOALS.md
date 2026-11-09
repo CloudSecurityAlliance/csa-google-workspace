@@ -6,7 +6,7 @@ or the changelog, it does not belong.
 
 Shared goals for CSA's MCP server fleet — library-first, local stdio, one fail-closed seam at the
 data boundary, capability coverage over API coverage — are stated once in the fleet roster
-(`surfaces/mcp/ROSTER.md` in the internal CINO-Platform-Engineering repo) and are not restated here.
+(`surfaces/mcp/ROSTER.md` in the internal CINO-Engineering repo) and are not restated here.
 This file records only what is specific to Google Workspace.
 
 ## North Star

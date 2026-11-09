@@ -74,8 +74,8 @@ The audit-index guard went green while the committed index did not match. Record
 than only in the issue because the shape recurs across the fleet: a check that derives its
 expectation from the same stale artifact it is checking cannot fail.
 
-The fleet-level version is CINO-Platform-Engineering
-[`insights/a-green-check-is-only-evidence-about-what-it-ran-on.md`](https://github.com/CloudSecurityAlliance-Internal/CINO-Platform-Engineering/blob/main/insights/a-green-check-is-only-evidence-about-what-it-ran-on.md).
+The fleet-level version is CINO-Engineering
+[`insights/a-green-check-is-only-evidence-about-what-it-ran-on.md`](https://github.com/CloudSecurityAlliance-Internal/CINO-Engineering/blob/main/insights/a-green-check-is-only-evidence-about-what-it-ran-on.md).
 
 ## F6 — `ls -l` cannot tell a hardened credential from an unhardened one
 
