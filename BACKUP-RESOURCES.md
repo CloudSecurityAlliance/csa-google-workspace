@@ -51,7 +51,7 @@ Three things follow, and the third is the reason this file exists:
 2. **`ls -l` is useless here.** All of these render `-rw-r--r--` in Git Bash, which is not the
    permission that governs access on Windows and would have made the hardened and unhardened
    files look identical. The ACL is the fact; the mode is a rendering. See
-   [`POSIX-AND-WINDOWS.md`](https://github.com/CloudSecurityAlliance-Internal/CINO-Platform-Engineering/blob/main/POSIX-AND-WINDOWS.md).
+   [`POSIX-AND-WINDOWS.md`](https://github.com/CloudSecurityAlliance-Internal/CINO-Engineering/blob/main/POSIX-AND-WINDOWS.md).
 3. **Nothing points the detector at stale files.** `file_is_owner_only()` found this in one line,
    and it is only ever called on the path currently in use. A credential-bearing file that is no
    longer referenced is exactly the one nobody re-checks.

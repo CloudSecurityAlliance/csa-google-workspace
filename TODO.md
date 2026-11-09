@@ -1301,7 +1301,7 @@ no longer anything this project can do that a client cannot reach.
       *child* survives the server crashing, which a self-written file does not. So the log
       directory, JSONL writer, session ids, retention and `0600` handling were dropped before
       being built. Written up for every Python MCP server we build in
-      `CINO-Platform-Engineering/research/mcp-servers/LOGGING-BELONGS-TO-THE-CLIENT.md`.
+      `CINO-Engineering/research/mcp-servers/LOGGING-BELONGS-TO-THE-CLIENT.md`.
 
       **The "error store" half is not built and is not a gate.** What made C4 a gate was the
       config surface — the level name, spelled the way it will stay — and that has landed. A
