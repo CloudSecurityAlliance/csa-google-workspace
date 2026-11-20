@@ -14,7 +14,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "csa-google-workspace"
 dynamic = ["version"]
-description = "Read/write content and manage comments on Google Docs, Sheets, and Slides"
+description = "Read/write content and manage comments on Google Docs, Sheets, and Slides. Not affiliated with or endorsed by Google."
 readme = "README.md"
 requires-python = ">=3.14"
 license = "Apache-2.0"
