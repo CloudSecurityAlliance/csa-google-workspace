@@ -2,7 +2,7 @@
 
 A **Python library** for managing **comments** and **content** on Google **Docs, Sheets, and Slides**, via the Google APIs. Comments are handled uniformly across all three file types (a single Drive API v3 concern); content read/write and Sheets comment→cell mapping are the variant, per-API parts.
 
-Not affiliated with or endorsed by Google. Google and Google Workspace are trademarks of their owner.
+Not affiliated with or endorsed by Google. Google and Google Workspace are trademarks of Google LLC.
 
 > **Which comment API this uses, and why.** Comments go through the **Drive API v3**, which is
 > GA and works on any Drive file. Since mid-2026 the Docs, Sheets and Slides APIs have their own
